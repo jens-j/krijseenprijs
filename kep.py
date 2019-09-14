@@ -12,6 +12,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import pyqtgraph as pg
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout
+from PyQt5.QtCore import QTimer
 
 # CHUNK = 256
 
@@ -62,10 +63,11 @@ class KrijsEenPrijs(QMainWindow):
     def update(self):
 
         then = datetime.now()
-        self.axis.clear()
         t = np.linspace(0, 10, 101)
-        self.axis.plot(t, np.sin(t + time.time()))
-        self.axis.figure.canvas.draw()
+        y = np.sin(t + time.time())
+        self.plotWidget.clear()
+        self.plotWidget.plot(t, y)
+
         print('{} ms'.format((datetime.now() - then).total_seconds()))
 
 
@@ -74,12 +76,13 @@ class KrijsEenPrijs(QMainWindow):
         mainWidget = QWidget()
         self.setCentralWidget(mainWidget)
         layout = QVBoxLayout(mainWidget)
-        canvas = FigureCanvas(Figure(figsize=(5, 3)))
-        layout.addWidget(canvas)
-        self.axis = canvas.figure.add_subplot(111)
-        print('aap')
-        self.timer = canvas.new_timer(100, [(self.update, (), {})])
-        self.timer.start()
+        self.plotWidget = pg.plot()
+        layout.addWidget(self.plotWidget)
+
+        timer = QTimer(self)
+        timer.timeout.connect(self.update)
+        timer.start(20)
+        timer.start()
 
 
     def getStream(self):
@@ -98,6 +101,7 @@ class KrijsEenPrijs(QMainWindow):
         #     print('{} {}'.format(x, d['name']))
         #     pp.pprint(d)
 
+        assert(len(usbMicrophones) > 0, 'No microphone detected')
         mic = usbMicrophones[0][1]
 
         return pa.open(format=pyaudio.paInt16,
