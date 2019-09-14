@@ -46,29 +46,34 @@ from PyQt5.QtCore import QTimer
 
 class KrijsEenPrijs(QMainWindow):
 
-    CHUNK = 256
+    TIME_AXIS_LENGTH    = 1 # s
+    SAMPLE_RATE         = 48000 # Hz
+    UPDATE_T            = 0.02  # s
+    CHUNK               = int(SAMPLE_RATE * UPDATE_T)
+    TIME_AXIS_SAMPLES   = SAMPLE_RATE * TIME_AXIS_LENGTH
 
     def __init__(self):
 
         super().__init__()
         self.stream = self.getStream()
-
-        rawData = self.stream.read(self.CHUNK)
-        data = np.fromstring(rawData, np.int16)
-        print(data)
-
+        self.audioData = np.zeros(self.TIME_AXIS_SAMPLES, dtype=np.int16)
         self.initGui()
+        print(self.CHUNK)
 
 
     def update(self):
 
-        then = datetime.now()
-        t = np.linspace(0, 10, 101)
-        y = np.sin(t + time.time())
-        self.plotWidget.clear()
-        self.plotWidget.plot(t, y)
+        # then = datetime.now()
 
-        print('{} ms'.format((datetime.now() - then).total_seconds()))
+        rawData = self.stream.read(self.CHUNK, exception_on_overflow=False)
+        data = np.fromstring(rawData, np.int16)
+        self.audioData = np.append(self.audioData, data)[-self.TIME_AXIS_SAMPLES:]
+        t = np.linspace(0, 1, self.TIME_AXIS_SAMPLES)
+        self.plotWidget.clear()
+        self.plotWidget.plot(t, self.audioData)
+
+        # print('{} ms'.format((datetime.now() - then).total_seconds()))
+
 
 
     def initGui(self):
@@ -79,10 +84,10 @@ class KrijsEenPrijs(QMainWindow):
         self.plotWidget = pg.plot()
         layout.addWidget(self.plotWidget)
 
-        timer = QTimer(self)
-        timer.timeout.connect(self.update)
-        timer.start(20)
-        timer.start()
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.update)
+        self.timer.start(self.UPDATE_T * 1000)
+        self.timer.start()
 
 
     def getStream(self):
@@ -96,12 +101,7 @@ class KrijsEenPrijs(QMainWindow):
         usbMicrophones = \
             list(filter(lambda x: 'USB PnP Audio Device' in x[1]['name'], inputDevices))
 
-        # pp = pprint.PrettyPrinter()
-        # for x, d in usbMicrophones:
-        #     print('{} {}'.format(x, d['name']))
-        #     pp.pprint(d)
-
-        assert(len(usbMicrophones) > 0, 'No microphone detected')
+        assert len(usbMicrophones) > 0, 'No microphone detected'
         mic = usbMicrophones[0][1]
 
         return pa.open(format=pyaudio.paInt16,
