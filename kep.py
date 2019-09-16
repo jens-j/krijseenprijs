@@ -12,21 +12,23 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import pyqtgraph as pg
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout
 from PyQt5.QtCore import pyqtSignal, QTimer
 
 # TODO:
 # - spectrum scaling
 # - supersampling 
 # - spectrum vertical next to spectrogram 
+# - audio buffering
 
 class KrijsEenPrijs(QWidget):
 
-    TIME_AXIS_LENGTH        = 20    # s
+    TIME_AXIS_LENGTH        = 10    # s
     SAMPLE_RATE             = 48000 # Hz
     TIME_AXIS_SAMPLES       = SAMPLE_RATE * TIME_AXIS_LENGTH
-    DECIMATION              = 16
-    SPECTRUM_FFT_SIZE       = 2**11
+    DECIMATION              = 32
+    SPECTRUM_FFT_SIZE       = 2**10
+    SPECTRUM_MAX            = 3000
 
     updateSignal = pyqtSignal()
 
@@ -51,7 +53,10 @@ class KrijsEenPrijs(QWidget):
 
         self.resize(1920, 1080)
         pg.setConfigOptions(imageAxisOrder='row-major')
-        layout = QVBoxLayout(self)
+
+        #plotLayout = QVBoxLayout(self)
+        layout = QGridLayout(self)
+        spectrogramLayout = QHBoxLayout(self)
 
         self.timePlot = pg.PlotWidget()
         self.spectrumPlot = pg.PlotWidget()
@@ -59,22 +64,14 @@ class KrijsEenPrijs(QWidget):
         self.spectrogramImage = pg.ImageItem()
 
         self.timePlot.setRange(yRange=[-2**16 / 2, 2**16 / 2])
-        self.spectrumPlot.setLogMode(x=True)
-        self.spectrogramPlot.setLogMode(y=True)
+        #self.spectrumPlot.setLogMode(x=True)
+        #self.spectrogramPlot.setLogMode(y=True)
         self.spectrogramPlot.addItem(self.spectrogramImage)
-        hist = pg.HistogramLUTItem()
-        hist.setImageItem(self.spectrogramImage)
-        hist.plot.setLogMode(False, True)
-        hist.setLevels(0, 100)
-        hist.gradient.restoreState(
-        {'mode': 'rgb',
-         'ticks': [(0.5, (0, 182, 188, 255)),
-                   (1.0, (246, 111, 0, 255)),
-                   (0.0, (75, 0, 113, 255))]})
+        self.spectrogramImage.setLevels([0, self.SPECTRUM_MAX])
 
-        layout.addWidget(self.timePlot)
-        layout.addWidget(self.spectrumPlot)
-        layout.addWidget(self.spectrogramPlot)
+        layout.addWidget(self.timePlot, 0, 0)
+        layout.addWidget(self.spectrumPlot, 1, 0)
+        layout.addWidget(self.spectrogramPlot, 2, 0)
 
 
     def updateGui(self):
@@ -98,9 +95,10 @@ class KrijsEenPrijs(QWidget):
         self.timePlot.plot(t, data[::self.DECIMATION])
         self.spectrumPlot.clear()
         self.spectrumPlot.plot(self.spectrumScale, spectrum)
-        self.spectrumPlot.setRange(yRange=[0, 2000])
+        self.spectrumPlot.setRange(yRange=[0, self.SPECTRUM_MAX])
 
-        self.spectrogramImage.setImage(self.spectrogram)
+        self.spectrogramImage.setImage(self.spectrogram, autoLevels=False)
+        #self.histogram.setImageItem(self.spectrogramImage)
 
         self.t0 = t1
 
