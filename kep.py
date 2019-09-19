@@ -8,12 +8,12 @@ from datetime import datetime
 
 import numpy as np
 from scipy import signal
-import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import pyqtgraph as pg
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout
-from PyQt5.QtCore import pyqtSignal, QTimer
+from PyQt5.QtCore import pyqtSignal, QTimer, QObject
+from PyQt5.uic import loadUi
 
 # TODO:
 # - spectrum scaling
@@ -21,20 +21,22 @@ from PyQt5.QtCore import pyqtSignal, QTimer
 # - spectrum vertical next to spectrogram 
 # - audio buffering
 
-class KrijsEenPrijs(QWidget):
+class KrijsEenPrijs(QObject):
 
     TIME_AXIS_LENGTH        = 10    # s
     SAMPLE_RATE             = 48000 # Hz
     TIME_AXIS_SAMPLES       = SAMPLE_RATE * TIME_AXIS_LENGTH
     DECIMATION              = 32
-    SPECTRUM_FFT_SIZE       = 2**10
+    SPECTRUM_FFT_SIZE       = 2**11
     SPECTRUM_MAX            = 3000
 
     updateSignal = pyqtSignal()
 
     def __init__(self):
 
-        super().__init__()
+        super(KrijsEenPrijs, self).__init__()
+        self.t0 = datetime.now()
+        self.u0 = datetime.now()
         self.sampleCounter = 0
         self.spectrogram = \
             np.zeros((self.SPECTRUM_FFT_SIZE // 2 + 1, 
@@ -46,41 +48,29 @@ class KrijsEenPrijs(QWidget):
         self.stream = self.getStream()
         self.audioData = np.zeros(self.TIME_AXIS_SAMPLES, dtype=np.int16)
         self.initGui()
-        self.t0 = datetime.now()
 
 
     def initGui(self):
 
-        self.resize(1920, 1080)
+        self.ui = loadUi('kep.ui')
+        #self.resize(1920, 1080)
         pg.setConfigOptions(imageAxisOrder='row-major')
-
-        #plotLayout = QVBoxLayout(self)
-        layout = QGridLayout(self)
-        spectrogramLayout = QHBoxLayout(self)
-
-        self.timePlot = pg.PlotWidget()
-        self.spectrumPlot = pg.PlotWidget()
-        self.spectrogramPlot = pg.PlotWidget()
+        
+        self.ui.timePlot.setRange(yRange=[-2**16 / 2, 2**16 / 2])
+        #self.ui.spectrumPlot.setLogMode(x=True)
+        #self.ui.spectrogramPlot.setLogMode(y=True)
         self.spectrogramImage = pg.ImageItem()
-
-        self.timePlot.setRange(yRange=[-2**16 / 2, 2**16 / 2])
-        #self.spectrumPlot.setLogMode(x=True)
-        #self.spectrogramPlot.setLogMode(y=True)
-        self.spectrogramPlot.addItem(self.spectrogramImage)
+        self.ui.spectrogramPlot.addItem(self.spectrogramImage)
         self.spectrogramImage.setLevels([0, self.SPECTRUM_MAX])
-
-        layout.addWidget(self.timePlot, 0, 0)
-        layout.addWidget(self.spectrumPlot, 1, 0)
-        layout.addWidget(self.spectrogramPlot, 2, 0)
+        self.ui.resize(1920, 1080)
+        self.ui.show()
 
 
     def updateGui(self):
 
         t1 = datetime.now()
+
         data = self.audioData[:]
-
-        print('{} ms'.format(int((datetime.now() - self.t0).total_seconds() * 1000)))
-
         t = np.linspace(-self.TIME_AXIS_LENGTH, 0, self.TIME_AXIS_SAMPLES / self.DECIMATION)
 
         spectrum = np.abs(np.fft.rfft(data[-self.SPECTRUM_FFT_SIZE:]))
@@ -90,20 +80,30 @@ class KrijsEenPrijs(QWidget):
 
         self.spectrogram = self.spectrogram[:,1:]
         self.spectrogram = np.column_stack([self.spectrogram, np.float32(spectrum)])
+
+        t2 = datetime.now()
         
-        self.timePlot.clear()
-        self.timePlot.plot(t, data[::self.DECIMATION])
-        self.spectrumPlot.clear()
-        self.spectrumPlot.plot(self.spectrumScale, spectrum)
-        self.spectrumPlot.setRange(yRange=[0, self.SPECTRUM_MAX])
+        self.ui.timePlot.clear()
+        self.ui.timePlot.plot(t, data[::self.DECIMATION])
+        self.ui.spectrumPlot.clear()
+        self.ui.spectrumPlot.plot(self.spectrumScale, spectrum)
+        self.ui.spectrumPlot.setRange(yRange=[0, self.SPECTRUM_MAX])
 
         self.spectrogramImage.setImage(self.spectrogram, autoLevels=False)
-        #self.histogram.setImageItem(self.spectrogramImage)
+
+        t3 = datetime.now()
+
+        print('{} ms calc, {} ms plot, {} ms update'.format(
+            int((t2 - t1).total_seconds() * 1000),
+            int((t3 - t2).total_seconds() * 1000),
+            int((t1 - self.t0).total_seconds() * 1000)))
 
         self.t0 = t1
 
 
     def streamCallback(self, inputData, frameCount, timeInfo, status):
+
+        u1 = datetime.now()
 
         data = np.fromstring(inputData, np.int16)
         self.newAudioData = np.append(self.audioData, data)
@@ -114,6 +114,9 @@ class KrijsEenPrijs(QWidget):
         #     self.sampleCounter -= self.SAMPLE_RATE * self.UPDATE_T
         self.updateSignal.emit()
         #     print('emit')
+
+        #print('{} ms'.format(int((u1 - self.u0).total_seconds() * 1000)))
+        self.u0 = u1
 
         return (inputData, pyaudio.paContinue)
 
@@ -145,7 +148,6 @@ class KrijsEenPrijs(QWidget):
 def main():
     qApp = QApplication(sys.argv)
     kep = KrijsEenPrijs()
-    kep.show()
     qApp.exec_()
     
 
