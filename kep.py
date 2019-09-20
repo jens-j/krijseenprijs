@@ -23,8 +23,8 @@ class KrijsEenPrijs(QObject):
 
     TIME_AXIS_LENGTH        = 8    # s
     SAMPLE_RATE             = 48000 # Hz
-    DECIMATION              = 64
-    CHUNK_SIZE              = 2**10
+    DECIMATION              = 16
+    CHUNK_SIZE              = 2**11
     FFT_SIZE                = 2**11
     SPECTRUM_MAX            = 2000
     SPECTRUM_DECAY          = 5     # s
@@ -50,9 +50,9 @@ class KrijsEenPrijs(QObject):
         self.spectrumScale = \
             np.linspace(0, self.SAMPLE_RATE / 2, self.FFT_SIZE / 2 + 1)
         self.updateSignal.connect(self.updateGui)
-        self.stream = self.getStream()
         self.audioData = np.zeros(self.TIME_AXIS_SAMPLES, dtype=np.int16)
         self.initGui()
+        self.stream = self.getStream()
 
 
     def initGui(self):
@@ -63,20 +63,15 @@ class KrijsEenPrijs(QObject):
         
         self.ui.timePlot.setLabels(title='Time Series', left='amplitude', bottom='s')
         self.ui.timePlot.setRange(yRange=[-2**16 / 2, 2**16 / 2])
+
         self.ui.spectrumPlot.setLabels(title='Power Spectral Density', left='Hz', bottom='P/sqrt(Hz)')
-        self.ui.spectrumPlot.setLogMode(False, True)#setLogMode(y=True)
-        self.ui.spectrumPlot.setRange(xRange=[0, self.SPECTRUM_MAX])
+        self.ui.spectrumPlot.getPlotItem().setLogMode(True, False)
+        self.ui.spectrumPlot.getPlotItem().setRange(xRange=[-4, 4])
+        
         self.spectrogramImage = pg.ImageItem()
         self.ui.spectrogramPlot.setLabels(title='Spectrogram', left='FFT bin', bottom='s')
         self.ui.spectrogramPlot.addItem(self.spectrogramImage)
         self.spectrogramImage.setLevels([0, self.SPECTRUM_MAX / 2])
-
-        # pos = np.array([0., 1., 0.5, 0.25, 0.75])
-        # color = np.array([[0,255,255,255], 
-        #                   [255,255,0,255], 
-        #                   [0,0,0,255], 
-        #                   [0, 0, 255, 255], 
-        #                   [255, 0, 0, 255]], dtype=np.ubyte)
 
         pos = np.array([0., 0.3, 0.7, 1.0])
         color = np.array([[0x0,  0x0,  0x24, 0xff], 
@@ -117,8 +112,8 @@ class KrijsEenPrijs(QObject):
         window = np.ones(self.SPECTRUM_SMOOTH) / self.SPECTRUM_SMOOTH
         smoothSpectrum = np.convolve(spectrum, window, mode='same')
 
-        # self.maxSpectrum = np.maximum(self.maxSpectrum, smoothSpectrum)
-        self.trailSpectrum = np.maximum(self.trailSpectrum, smoothSpectrum)
+        self.maxSpectrum = np.maximum(self.maxSpectrum, smoothSpectrum)
+        #self.trailSpectrum = np.maximum(self.trailSpectrum, smoothSpectrum)
 
         self.spectrogram = self.spectrogram[:,1:]
         self.spectrogram = np.column_stack([self.spectrogram, np.float32(spectrum)])
@@ -129,19 +124,18 @@ class KrijsEenPrijs(QObject):
         self.ui.timePlot.plot(t, data[::self.DECIMATION])
         self.ui.spectrumPlot.clear()
         self.ui.spectrumPlot.plot(spectrum, self.spectrumScale)
-        self.ui.spectrumPlot.plot(self.trailSpectrum, self.spectrumScale, 
-            pen=pg.mkPen('r', style=Qt.DotLine))
-        # self.ui.spectrumPlot.plot(self.maxSpectrum, self.spectrumScale, 
-        #     pen=pg.mkPen('y', style=Qt.DotLine))
+        #self.ui.spectrumPlot.plot(self.trailSpectrum, self.spectrumScale, pen=pg.mkPen('r', style=Qt.DotLine))
+        self.ui.spectrumPlot.plot(self.maxSpectrum, self.spectrumScale, 
+            pen=pg.mkPen('y', style=Qt.DotLine))
 
         self.spectrogramImage.setImage(self.spectrogram, autoLevels=False)
 
         t3 = datetime.now()
 
-        print('{} ms calc, {} ms plot, {} ms update'.format(
-            int((t2 - t1).total_seconds() * 1000),
-            int((t3 - t2).total_seconds() * 1000),
-            int((t1 - self.t0).total_seconds() * 1000)))
+        # print('{} ms calc, {} ms plot, {} ms update'.format(
+        #     int((t2 - t1).total_seconds() * 1000),
+        #     int((t3 - t2).total_seconds() * 1000),
+        #     int((t1 - self.t0).total_seconds() * 1000)))
 
         self.t0 = t1
 
