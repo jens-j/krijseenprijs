@@ -15,15 +15,14 @@ from PyQt5.uic import loadUi
 
 # TODO:
 # - spectrum scaling
-# - supersampling 
-# - spectrum vertical next to spectrogram 
-# - audio buffering
+# - log spectrogram
+# - spectrogram ticks
 
 class KrijsEenPrijs(QObject):
 
     TIME_AXIS_LENGTH        = 8    # s
     SAMPLE_RATE             = 48000 # Hz
-    DECIMATION              = 16
+    DECIMATION              = 32
     CHUNK_SIZE              = 2**11
     FFT_SIZE                = 2**11
     SPECTRUM_MAX            = 2000
@@ -37,20 +36,31 @@ class KrijsEenPrijs(QObject):
     def __init__(self):
 
         super(KrijsEenPrijs, self).__init__()
-        self.t0 = datetime.now()
-        self.u0 = datetime.now()
+
         self.running = True
         self.sampleCounter = 0
+        self.streamCount = 0
+        self.updateCount = 0
+        self.t0 = datetime.now()
+        self.u0 = datetime.now()
+        self.audioData = np.zeros(self.TIME_AXIS_SAMPLES, dtype=np.int16)
         self.maxSpectrum = np.zeros(self.FFT_SIZE // 2 + 1, dtype=np.int16)
         self.trailSpectrum = np.zeros(self.FFT_SIZE // 2 + 1, dtype=np.int16)
-        self.spectrogram = \
-            np.zeros((self.FFT_SIZE // 2 + 1, 
-                      self.TIME_AXIS_SAMPLES // self.FFT_SIZE),
-                     dtype=np.float32)
-        self.spectrumScale = \
-            np.linspace(0, self.SAMPLE_RATE / 2, self.FFT_SIZE / 2 + 1)
+        self.spectrumScale = np.linspace(0, self.SAMPLE_RATE / 2, self.FFT_SIZE / 2 + 1)
+        self.timeAxis = np.linspace(
+            -self.TIME_AXIS_LENGTH, 0, self.TIME_AXIS_SAMPLES / self.DECIMATION)
+
+        self.logScaleSpectrogram = (np.log(range(1, self.FFT_SIZE // 2 + 2)) 
+            / np.log(self.FFT_SIZE // 2 + 2) * self.FFT_SIZE // 2 + 1)
+
+        print(self.logScaleSpectrogram)
+
+        self.spectrogram = np.zeros((self.FFT_SIZE // 2 + 1, 
+                                     self.TIME_AXIS_SAMPLES // self.CHUNK_SIZE),
+                                    dtype=np.float32)
+
+        
         self.updateSignal.connect(self.updateGui)
-        self.audioData = np.zeros(self.TIME_AXIS_SAMPLES, dtype=np.int16)
         self.initGui()
         self.stream = self.getStream()
 
@@ -61,15 +71,23 @@ class KrijsEenPrijs(QObject):
         pg.setConfigOptions(
             imageAxisOrder='row-major', background=pg.mkColor(0x0, 0x0, 0x100, 0x24))
         
-        self.ui.timePlot.setLabels(title='Time Series', left='amplitude', bottom='s')
-        self.ui.timePlot.setRange(yRange=[-2**16 / 2, 2**16 / 2])
+        self.ui.timePlot.setLabels(title='Amplitude', left='amplitude', bottom='s')
+        self.ui.timePlot.setRange(yRange=[-2**15, 2**15])
+        self.timeCurve = self.ui.timePlot.plot()
+
+        self.ui.powerPlot.setLabels(title='Power', left='dBFS', bottom='s')
+        self.ui.powerPlot.setRange(yRange=[-130, 10])
+        self.powerCurve = self.ui.powerPlot.plot()
 
         self.ui.spectrumPlot.setLabels(title='Power Spectral Density', left='Hz', bottom='P/sqrt(Hz)')
-        self.ui.spectrumPlot.getPlotItem().setLogMode(True, False)
+        self.ui.spectrumPlot.getPlotItem().setLogMode(True, True)
         self.ui.spectrumPlot.getPlotItem().setRange(xRange=[-4, 4])
+        self.spectrumCurve = self.ui.spectrumPlot.plot()
+        self.spectrumMaxCurve = self.ui.spectrumPlot.plot()
         
         self.spectrogramImage = pg.ImageItem()
         self.ui.spectrogramPlot.setLabels(title='Spectrogram', left='FFT bin', bottom='s')
+
         self.ui.spectrogramPlot.addItem(self.spectrogramImage)
         self.spectrogramImage.setLevels([0, self.SPECTRUM_MAX / 2])
 
@@ -91,51 +109,52 @@ class KrijsEenPrijs(QObject):
         self.ui.show()
 
 
+    def getSpectrum(self, data):
+
+        data = data * np.hanning(self.CHUNK_SIZE)
+        data = np.concatenate([data, np.zeros(self.FFT_SIZE - self.CHUNK_SIZE)])
+
+        spectrum = np.fft.rfft(data[-self.FFT_SIZE:])
+        spectrum = np.abs(spectrum) * 2 / self.FFT_SIZE
+        # spectrum = spectrum / np.power(2.0, 8 * 16 - 1)
+        # spectrum = (20 * np.log10(spectrum)).clip(-120)
+        spectrum[spectrum == 0] = 1E-6
+
+        return spectrum
+
+
     def updateGui(self):
 
         t1 = datetime.now()
 
         data = self.audioData[:]
-        paddedData = np.concatenate([data, np.zeros(self.FFT_SIZE - self.CHUNK_SIZE)])
+        spectrum = self.getSpectrum(data[-self.CHUNK_SIZE:])
+        # spectrum[spectrum == 0] = 1E-6
+        #spectrum = 10 * np.log(spectrum / 2**15)
+        #power = np.sqrt(np.square(self.audioData[::self.DECIMATION]))
+        power = abs(data[::self.DECIMATION])
+        power = 10 * np.log(power / 2**15)
 
-        t = np.linspace(-self.TIME_AXIS_LENGTH, 0, self.TIME_AXIS_SAMPLES / self.DECIMATION)
-
-        spectrum = np.abs(np.fft.rfft(paddedData[-self.FFT_SIZE:]))
-        spectrum = spectrum * 2 / self.FFT_SIZE
-        # spectrum = spectrum / np.power(2.0, 8 * 16 - 1)
-        # spectrum = (20 * np.log10(spectrum)).clip(-120)
-
-        self.trailSpectrum -= np.array(
-            [self.SPECTRUM_MAX / self.SPECTRUM_DECAY / self.UPDATE_FREQ] * len(self.maxSpectrum),
-            dtype=np.int16)
-
-        window = np.ones(self.SPECTRUM_SMOOTH) / self.SPECTRUM_SMOOTH
-        smoothSpectrum = np.convolve(spectrum, window, mode='same')
-
-        self.maxSpectrum = np.maximum(self.maxSpectrum, smoothSpectrum)
-        #self.trailSpectrum = np.maximum(self.trailSpectrum, smoothSpectrum)
-
+        self.maxSpectrum = np.maximum(self.maxSpectrum, spectrum)
         self.spectrogram = self.spectrogram[:,1:]
         self.spectrogram = np.column_stack([self.spectrogram, np.float32(spectrum)])
-
         t2 = datetime.now()
         
-        self.ui.timePlot.clear()
-        self.ui.timePlot.plot(t, data[::self.DECIMATION])
-        self.ui.spectrumPlot.clear()
-        self.ui.spectrumPlot.plot(spectrum, self.spectrumScale)
+        self.timeCurve.setData(self.timeAxis, data[::self.DECIMATION])
+        self.powerCurve.setData(self.timeAxis, power)
+        self.spectrumCurve.setData(spectrum, self.spectrumScale)
         #self.ui.spectrumPlot.plot(self.trailSpectrum, self.spectrumScale, pen=pg.mkPen('r', style=Qt.DotLine))
-        self.ui.spectrumPlot.plot(self.maxSpectrum, self.spectrumScale, 
-            pen=pg.mkPen('y', style=Qt.DotLine))
+        self.spectrumMaxCurve.setData(self.maxSpectrum, self.spectrumScale, 
+            pen=pg.mkPen('r'))#, style=Qt.DotLine))
 
         self.spectrogramImage.setImage(self.spectrogram, autoLevels=False)
 
         t3 = datetime.now()
 
-        # print('{} ms calc, {} ms plot, {} ms update'.format(
-        #     int((t2 - t1).total_seconds() * 1000),
-        #     int((t3 - t2).total_seconds() * 1000),
-        #     int((t1 - self.t0).total_seconds() * 1000)))
+        print('{} ms calc, {} ms plot, {} ms update'.format(
+            int((t2 - t1).total_seconds() * 1000),
+            int((t3 - t2).total_seconds() * 1000),
+            int((t1 - self.t0).total_seconds() * 1000)))
 
         self.t0 = t1
 
@@ -143,6 +162,8 @@ class KrijsEenPrijs(QObject):
     def streamCallback(self, inputData, frameCount, timeInfo, status):
 
         u1 = datetime.now()
+
+        self.frameCount = frameCount
 
         data = np.fromstring(inputData, np.int16)
 
@@ -173,9 +194,9 @@ class KrijsEenPrijs(QObject):
 
         return pa.open(format=pyaudio.paInt16,
                        input_device_index=mic['index'],
-                       channels=mic['maxInputChannels'],
-                       rate=int(mic['defaultSampleRate']), 
-                       frames_per_buffer=self.FFT_SIZE,
+                       channels=1,
+                       rate=self.SAMPLE_RATE, 
+                       frames_per_buffer=self.CHUNK_SIZE,
                        input=True,
                        stream_callback=self.streamCallback)
 
@@ -189,7 +210,10 @@ class KrijsEenPrijs(QObject):
 
 
     def reset(self):
-        self.maxSpectrum = np.zeros(self.FFT_SIZE // 2 + 1, dtype=np.int16)
+        self.maxSpectrum = np.ones(self.FFT_SIZE // 2 + 1, dtype=np.int16) * 1E-6
+        if not self.running:
+            self.ui.spectrumPlot.clear()
+            self.ui.spectrumPlot.plot(self.maxSpectrum, self.spectrumScale)
 
 
 def main():
