@@ -27,12 +27,11 @@ class KrijsEenPrijs(QObject):
     SAMPLE_RATE             = 48000 # Hz
     DECIMATION              = 32
     CHUNK_SIZE              = 2**11
+    CHUNK_DIVIDE            = 2
     FFT_SIZE                = 2**12
     FFT_RESOLUTION          = SAMPLE_RATE // FFT_SIZE
     SPECTRUM_MIN            = -160
     SPECTRUM_MAX            = 0
-    SPECTRUM_DECAY          = 5     # s
-    SPECTRUM_SMOOTH         = 1
     TIME_AXIS_SAMPLES       = SAMPLE_RATE * TIME_AXIS_LENGTH
     UPDATE_FREQ             = SAMPLE_RATE // CHUNK_SIZE
 
@@ -57,6 +56,10 @@ class KrijsEenPrijs(QObject):
         self.initGui()
         self.updateSignal.connect(self.updateGui)
         self.stream = self.getStream()
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.updateGui)
+        self.timer.start(self.SAMPLE_RATE / self.CHUNK_SIZE)
+        self.timer.start()
 
 
     def initPlotData(self):
@@ -65,7 +68,7 @@ class KrijsEenPrijs(QObject):
         self.audioData = np.zeros(self.TIME_AXIS_SAMPLES, dtype=np.int16)
         self.maxSpectrum = np.ones(self.FFT_SIZE // 2 + 1, dtype=np.int16) * self.SPECTRUM_MIN
         self.spectrogram = np.ones((self.FFT_SIZE // 2 + 1, 
-                             self.TIME_AXIS_SAMPLES // (self.CHUNK_SIZE // 2)),
+                             self.TIME_AXIS_SAMPLES // (self.CHUNK_SIZE // self.CHUNK_DIVIDE)),
                             dtype=np.float32) * self.SPECTRUM_MIN
 
 
@@ -122,8 +125,8 @@ class KrijsEenPrijs(QObject):
 
     def getSpectrum(self, data):
 
-        data = data * np.hanning(self.CHUNK_SIZE // 2)
-        data = np.concatenate([data, np.zeros(self.FFT_SIZE - self.CHUNK_SIZE // 2)])
+        data = data * np.hanning(len(data))
+        data = np.concatenate([data, np.zeros(self.FFT_SIZE - len(data))])
 
         spectrum = np.fft.rfft(data[-self.FFT_SIZE:])
         spectrum = np.abs(spectrum) * 2 / self.FFT_SIZE
@@ -137,24 +140,26 @@ class KrijsEenPrijs(QObject):
 
         t1 = datetime.now()
 
+        if len(self.deque) == 0:
+            print('no data in queue')
+            return
+
         newData = self.deque.popleft()
         self.audioData = np.append(self.audioData, newData)
         self.audioData = self.audioData[-self.TIME_AXIS_SAMPLES:]
 
-        fftDataA = newData[-self.CHUNK_SIZE:-self.CHUNK_SIZE // 2]
-        fftDataB = newData[-self.CHUNK_SIZE // 2:]
+        # process two spectra for every GUI update
+        for i in range(self.CHUNK_DIVIDE):
 
-        spectrum = self.getSpectrum(fftDataA)
+            length = self.CHUNK_SIZE // self.CHUNK_DIVIDE
+            x = (-self.CHUNK_DIVIDE + i) * length 
+            y = (-self.CHUNK_DIVIDE + 1 + i) * length
 
-        self.maxSpectrum = np.maximum(self.maxSpectrum, spectrum)
-        self.spectrogram = self.spectrogram[:,1:]
-        self.spectrogram = np.column_stack([self.spectrogram, np.float32(spectrum)])
-
-        spectrum = self.getSpectrum(fftDataB)
-
-        self.maxSpectrum = np.maximum(self.maxSpectrum, spectrum)
-        self.spectrogram = self.spectrogram[:,1:]
-        self.spectrogram = np.column_stack([self.spectrogram, np.float32(spectrum)])
+            fftData = newData[x:] if y == 0 else newData[x:y]
+            spectrum = self.getSpectrum(fftData)
+            self.maxSpectrum = np.maximum(self.maxSpectrum, spectrum)
+            self.spectrogram = self.spectrogram[:,1:]
+            self.spectrogram = np.column_stack([self.spectrogram, np.float32(spectrum)])
 
 
         maxPower = np.amax(spectrum)
@@ -189,7 +194,7 @@ class KrijsEenPrijs(QObject):
 
         if self.running:
             self.deque.append(data)
-            self.updateSignal.emit()
+            #self.updateSignal.emit()
 
         return (inputData, pyaudio.paContinue)
 
@@ -227,6 +232,7 @@ class KrijsEenPrijs(QObject):
 
     def reset(self):
         self.initPlotData()
+        self.deque.append(np.zeros(self.CHUNK_SIZE))
         self.updateSignal.emit()
 
 def main():
