@@ -158,7 +158,7 @@
                      </font>
                     </property>
                     <property name="text">
-                     <string>0</string>
+                     <string>0 Hz</string>
                     </property>
                     <property name="alignment">
                      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
@@ -193,6 +193,18 @@
                  </property>
                  <property name="text">
                   <string>stop</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="saveButton">
+                 <property name="font">
+                  <font>
+                   <pointsize>14</pointsize>
+                  </font>
+                 </property>
+                 <property name="text">
+                  <string>save</string>
                  </property>
                 </widget>
                </item>
