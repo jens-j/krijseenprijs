@@ -10,6 +10,7 @@ from collections import deque
 
 import numpy as np
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from scipy.interpolate import interp1d
 import pyqtgraph as pg
 from pyqtgraph.exporters import ImageExporter
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, \
@@ -27,6 +28,7 @@ from PyQt5.uic import loadUi
 # - overlapping FFT windows
 # - calibration
 # - sron logo
+# - save wav
 
 class KrijsEenPrijs(QObject):
 
@@ -147,7 +149,7 @@ class KrijsEenPrijs(QObject):
         self.spectrumMaxCurve = self.plots.spectrumPlot.plot()
         
         self.spectrogramImage = pg.ImageItem()
-        self.plots.spectrogramPlot.setTitle('Power Spectral Density', **self.titleStyle)
+        self.plots.spectrogramPlot.setTitle('Spectrogram', **self.titleStyle)
         self.plots.spectrogramPlot.setLabel('left', 'FFT bin', **self.labelStyle)
         self.plots.spectrogramPlot.setLabel('bottom', 'time (s)', **self.labelStyle)
         self.plots.spectrogramPlot.getAxis('left').tickFont = self.font
@@ -170,6 +172,7 @@ class KrijsEenPrijs(QObject):
         self.plots.saveButton.clicked.connect(self.save)
         self.plots.resetButton.clicked.connect(self.reset)
 
+        self.plots.setWindowTitle('Plots')
         self.plots.resize(1920, 1080)
         self.plots.show()
 
@@ -184,7 +187,7 @@ class KrijsEenPrijs(QObject):
         self.scores.powerHistogram.getAxis('left').tickFont = self.font
         self.scores.powerHistogram.getAxis('bottom').tickFont = self.font
 
-        self.scores.frequencyHistogram.setTitle('Loudest Frequency Distribution', **self.titleStyle)
+        self.scores.frequencyHistogram.setTitle('Main Frequency Distribution', **self.titleStyle)
         self.scores.frequencyHistogram.setLabel('left', '# of people', **self.labelStyle)
         self.scores.frequencyHistogram.setLabel('bottom', 'frequency (Hz)', **self.labelStyle)
         self.scores.frequencyHistogram.getAxis('left').tickFont = self.font
@@ -199,6 +202,7 @@ class KrijsEenPrijs(QObject):
             frequencyScores, bins=np.linspace(0, self.SAMPLE_RATE // 4, self.FFT_SIZE // 4 + 1))
         self.scores.frequencyHistogram.plot(x, y, stepMode=True, fillLevel=0, brush=(0,0,255,150))
 
+        self.scores.setWindowTitle('High Scores')
         self.scores.resize(1920, 1080)
         self.scores.show()
 
@@ -238,9 +242,24 @@ class KrijsEenPrijs(QObject):
 
             self.spectrum = self.getSpectrum(fftData)
             self.maxSpectrum = np.maximum(self.maxSpectrum, self.spectrum)
-            self.spectrogram = self.spectrogram[:,1:]
-            self.spectrogram = np.column_stack([self.spectrogram, np.float32(self.spectrum)])
 
+            # create log interpolation of the spectrum
+            SIZE = self.FFT_SIZE // 2 + 1
+            linRange = np.array(np.arange(SIZE))
+            logRange = (1 - np.log10(SIZE - linRange) / np.log10(SIZE)) * (SIZE - 1)
+
+            f = interp1d(linRange, self.spectrum, kind='cubic')
+
+            # print('')
+            # print(linRange)
+            # print(logRange)
+            # print(f(linRange))
+            # print(f(logRange))
+
+            self.spectrogram = self.spectrogram[:,1:]
+            self.spectrogram = np.column_stack([self.spectrogram, f(logRange)])
+
+        # create higher precision spectrum for score
         self.longSpectrum = self.getSpectrum(self.audioData[-self.LONG_FFT_SIZE:])
         maxPower = float(np.amax(self.longSpectrum))
         if maxPower > self.maxPower:
@@ -380,7 +399,6 @@ class KrijsEenPrijs(QObject):
 
         # create rotated version of spectrum
         spectrumPlot = pg.PlotWidget()
-
         spectrumPlot.setTitle(title='Power Spectral Density', **self.titleStyle)
         spectrumPlot.setLabel('bottom', 'frequency (Hz)', **self.labelStyle)
         spectrumPlot.setLabel('left', 'power spectral density (dBFS)', **self.labelStyle)
@@ -395,6 +413,7 @@ class KrijsEenPrijs(QObject):
         spectrumCurve = spectrumPlot.plot()
         spectrumCurve.setData(self.spectrumScale, self.maxSpectrum)
 
+        # export plots to png
         ImageExporter(spectrumPlot.plotItem).export('spectrum.png')
         ImageExporter(self.plots.timePlot.plotItem).export('timeseries.png')
         ImageExporter(self.plots.spectrogramPlot.plotItem).export('spectrogram.png')
