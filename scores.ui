@@ -243,10 +243,10 @@
       </property>
       <layout class="QVBoxLayout" name="verticalLayout">
        <item>
-        <widget class="PlotWidget" name="plotPowerHistogram" native="true"/>
+        <widget class="PlotWidget" name="powerHistogram" native="true"/>
        </item>
        <item>
-        <widget class="PlotWidget" name="plotFrequencyHistogram" native="true"/>
+        <widget class="PlotWidget" name="frequencyHistogram" native="true"/>
        </item>
       </layout>
      </widget>

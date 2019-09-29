@@ -80,7 +80,8 @@ class KrijsEenPrijs(QObject):
             self.localScores = {}
         
         self.initPlotData()
-        self.initGui()
+        self.initPlotsGui()
+        self.initScoresGui()
         self.updatePlotsSignal.connect(self.updatePlots)
         self.updateScoresSignal.connect(self.updateScores)
         self.stream = self.getStream()
@@ -104,12 +105,13 @@ class KrijsEenPrijs(QObject):
                             dtype=np.float32) * self.SPECTRUM_MIN
 
 
-    def initGui(self):
+    def initPlotsGui(self):
 
-        self.plots = loadUi('plots.ui')
-        self.scores = loadUi('scores.ui')
+        
         pg.setConfigOptions(
             imageAxisOrder='row-major', background=pg.mkColor(0x0, 0x0, 0x100, 0x24))
+
+        self.plots = loadUi('plots.ui')
 
         self.font = QFont()
         self.font.setPixelSize(14)
@@ -167,6 +169,32 @@ class KrijsEenPrijs(QObject):
 
         self.plots.resize(1920, 1080)
         self.plots.show()
+
+
+    def initScoresGui(self):
+
+        self.scores = loadUi('scores.ui')
+
+        self.scores.powerHistogram.setTitle('Power Score Distribution', **self.titleStyle)
+        self.scores.powerHistogram.setLabel('left', '# of people', **self.labelStyle)
+        self.scores.powerHistogram.setLabel('bottom', 'Power (dBFS)', **self.labelStyle)
+        self.scores.powerHistogram.getAxis('left').tickFont = self.font
+        self.scores.powerHistogram.getAxis('bottom').tickFont = self.font
+
+        self.scores.frequencyHistogram.setTitle('Loudest Frequency Distribution', **self.titleStyle)
+        self.scores.frequencyHistogram.setLabel('left', '# of people', **self.labelStyle)
+        self.scores.frequencyHistogram.setLabel('bottom', 'frequency (Hz)', **self.labelStyle)
+        self.scores.frequencyHistogram.getAxis('left').tickFont = self.font
+        self.scores.frequencyHistogram.getAxis('bottom').tickFont = self.font
+
+        powerScores = [x[0] for x in self.globalScores.values()]
+        y, x = np.histogram(powerScores, bins=np.linspace(-100, 0, 21))
+        self.scores.powerHistogram.plot(x, y, stepMode=True, fillLevel=0, brush=(0,0,255,150))
+
+        frequencyScores = [x[1] for x in self.globalScores.values()]
+        y, x = np.histogram(
+            frequencyScores, bins=np.linspace(0, self.SAMPLE_RATE // 4, self.FFT_SIZE // 4 + 1))
+        self.scores.frequencyHistogram.plot(x, y, stepMode=True, fillLevel=0, brush=(0,0,255,150))
 
         self.scores.resize(1920, 1080)
         self.scores.show()
@@ -347,20 +375,6 @@ class KrijsEenPrijs(QObject):
 
         # create rotated version of spectrum
         spectrumPlot = pg.PlotWidget()
-
-        # spectrumPlot.setTitle(title='Power Spectral Density', **self.titleStyle)
-        # spectrumPlot.setLabel('left', 'frequency (Hz)', **self.labelStyle)
-        # spectrumPlot.setLabel(
-        #     'bottom', 'power spectral density (dBFS)', **self.labelStyle)
-        # spectrumPlot.getAxis('left').tickFont = self.font
-        # spectrumPlot.getAxis('bottom').tickFont = self.font
-        # spectrumPlot.getPlotItem().setLogMode(False, True)
-        # spectrumPlot.getPlotItem().setRange(
-        #     xRange=[self.SPECTRUM_MIN, self.SPECTRUM_MAX])
-        # spectrumPlot.getAxis('bottom').setTicks(
-        #     [[(x, str(x)) for x in range(self.SPECTRUM_MIN, self.SPECTRUM_MAX + 20, 20)]])
-        # spectrumCurve = spectrumPlot.plot()
-        # spectrumCurve.setData(self.maxSpectrum, self.spectrumScale)
 
         spectrumPlot.setTitle(title='Power Spectral Density', **self.titleStyle)
         spectrumPlot.setLabel('bottom', 'frequency (Hz)', **self.labelStyle)
