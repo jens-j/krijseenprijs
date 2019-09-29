@@ -26,6 +26,7 @@ from PyQt5.uic import loadUi
 # - same name validator
 # - overlapping FFT windows
 # - calibration
+# - sron logo
 
 class KrijsEenPrijs(QObject):
 
@@ -89,6 +90,8 @@ class KrijsEenPrijs(QObject):
         self.timer.start(self.SAMPLE_RATE / self.CHUNK_SIZE)
         self.timer.start()
 
+        print(self.spectrumScale)
+
 
     def initPlotData(self):
 
@@ -108,30 +111,42 @@ class KrijsEenPrijs(QObject):
         pg.setConfigOptions(
             imageAxisOrder='row-major', background=pg.mkColor(0x0, 0x0, 0x100, 0x24))
 
-        font = QFont()
-        font.setPixelSize(14)
-        
-        labelStyle = {'color': '#FFF', 'font-size': '20px'}
-        self.plots.timePlot.setLabel('left', 'amplitude', **labelStyle)
-        #self.plots.timePlot.setLabels(title='Amplitude', left='amplitude', bottom='s')
-        self.plots.timePlot.setRange(yRange=[-2**15, 2**15])
-        self.plots.timePlot.getAxis('left').tickFont = font
-        self.timeCurve = self.plots.timePlot.plot()
+        self.font = QFont()
+        self.font.setPixelSize(14)
+        self.labelStyle = {'color': '#FFF', 'font-size': '14px'}
+        self.titleStyle = {'color': '#FFF', 'font-size': '18px'}
 
-        self.plots.spectrumPlot.setLabels(
-            title='Power Spectral Density', left='Hz', bottom='dBFS')
+        self.plots.timePlot.setTitle('Microphone Signal', **self.labelStyle)
+        self.plots.timePlot.setLabel('left', 'amplitude', **self.labelStyle)
+        self.plots.timePlot.setLabel('bottom', 'time (s)', **self.labelStyle)
+        self.plots.timePlot.getAxis('left').tickFont = self.font
+        self.plots.timePlot.getAxis('bottom').tickFont = self.font
+        self.plots.timePlot.setRange(yRange=[-2**15, 2**15])
+        
+        self.plots.spectrumPlot.setTitle(title='Power Spectral Density', **self.titleStyle)
+        self.plots.spectrumPlot.setLabel('left', 'frequency (Hz)', **self.labelStyle)
+        self.plots.spectrumPlot.setLabel(
+            'bottom', 'power spectral density (dBFS)', **self.labelStyle)
+        self.plots.spectrumPlot.getAxis('left').tickFont = self.font
+        self.plots.spectrumPlot.getAxis('bottom').tickFont = self.font
         self.plots.spectrumPlot.getPlotItem().setLogMode(False, True)
-        self.plots.spectrumPlot.getPlotItem().setRange(xRange=[self.SPECTRUM_MIN, self.SPECTRUM_MAX])
+        self.plots.spectrumPlot.getPlotItem().setRange(
+            xRange=[self.SPECTRUM_MIN, self.SPECTRUM_MAX])
         self.plots.spectrumPlot.getAxis('bottom').setTicks(
             [[(x, str(x)) for x in range(self.SPECTRUM_MIN, self.SPECTRUM_MAX + 20, 20)]])
         # self.plots.spectrumPlot.getAxis('left').setTicks(
         #     [[(x, str(x)) for x in [10, 100, 1000, 10000]]])
+        
+        self.timeCurve = self.plots.timePlot.plot()
         self.spectrumCurve = self.plots.spectrumPlot.plot()
         self.spectrumMaxCurve = self.plots.spectrumPlot.plot()
         
         self.spectrogramImage = pg.ImageItem()
-        self.plots.spectrogramPlot.setLabels(title='Spectrogram', left='FFT bin', bottom='s')
-
+        self.plots.spectrogramPlot.setTitle('Power Spectral Density', **self.titleStyle)
+        self.plots.spectrogramPlot.setLabel('left', 'FFT bin', **self.labelStyle)
+        self.plots.spectrogramPlot.setLabel('bottom', 'time (s)', **self.labelStyle)
+        self.plots.spectrogramPlot.getAxis('left').tickFont = self.font
+        self.plots.spectrogramPlot.getAxis('bottom').tickFont = self.font
         self.plots.spectrogramPlot.addItem(self.spectrogramImage)
         self.spectrogramImage.setLevels([-160, 0])
 
@@ -212,7 +227,7 @@ class KrijsEenPrijs(QObject):
         self.timeCurve.setData(self.timeAxis, self.audioData[::self.DECIMATION])
         self.spectrumCurve.setData(self.spectrum, self.spectrumScale)
         self.spectrumMaxCurve.setData(self.maxSpectrum, self.spectrumScale, 
-            pen=pg.mkPen('r'))#, style=Qt.DotLine))
+            pen=pg.mkPen('r'))
 
 
     def clearLayout(self, layout):
@@ -257,15 +272,18 @@ class KrijsEenPrijs(QObject):
 
     def updateScores(self):
 
-        self.updateRanking(self.scores.boxGlobalLoudest.layout(), self.globalScores, 0, 'dBFS')
-        self.updateRanking(self.scores.boxGlobalHighest.layout(), self.globalScores, 1, 'Hz')
-        self.updateRanking(self.scores.boxGlobalLowest.layout(), self.globalScores, 1, 'Hz', 
+        self.updateRanking(self.scores.boxGlobalLowest.layout(), self.globalScores, 1, 'Hz')
+        self.updateRanking(self.scores.boxGlobalLoudest.layout(), self.globalScores, 0, 'dBFS', 
             reverse=True)
-
-        self.updateRanking(self.scores.boxLocalLoudest.layout(), self.localScores, 0, 'dBFS')
-        self.updateRanking(self.scores.boxLocalHighest.layout(), self.localScores, 1, 'Hz')
-        self.updateRanking(self.scores.boxLocalLowest.layout(), self.localScores, 1, 'Hz', 
+        self.updateRanking(self.scores.boxGlobalHighest.layout(), self.globalScores, 1, 'Hz', 
             reverse=True)
+        
+        self.updateRanking(self.scores.boxLocalLowest.layout(), self.localScores, 1, 'Hz')
+        self.updateRanking(self.scores.boxLocalLoudest.layout(), self.localScores, 0, 'dBFS', 
+            reverse=True)
+        self.updateRanking(self.scores.boxLocalHighest.layout(), self.localScores, 1, 'Hz', 
+            reverse=True)
+        
         
 
     def streamCallback(self, inputData, frameCount, timeInfo, status):
@@ -311,6 +329,7 @@ class KrijsEenPrijs(QObject):
 
     def save(self):
         self.timer.stop()
+        self.deque = deque()
 
         name = self.plots.lineName.text()
 
@@ -328,13 +347,34 @@ class KrijsEenPrijs(QObject):
 
         # create rotated version of spectrum
         spectrumPlot = pg.PlotWidget()
-        spectrumPlot.setLabels(
-            title='Power Spectral Density', bottom='Hz', left='dBFS')
+
+        # spectrumPlot.setTitle(title='Power Spectral Density', **self.titleStyle)
+        # spectrumPlot.setLabel('left', 'frequency (Hz)', **self.labelStyle)
+        # spectrumPlot.setLabel(
+        #     'bottom', 'power spectral density (dBFS)', **self.labelStyle)
+        # spectrumPlot.getAxis('left').tickFont = self.font
+        # spectrumPlot.getAxis('bottom').tickFont = self.font
+        # spectrumPlot.getPlotItem().setLogMode(False, True)
+        # spectrumPlot.getPlotItem().setRange(
+        #     xRange=[self.SPECTRUM_MIN, self.SPECTRUM_MAX])
+        # spectrumPlot.getAxis('bottom').setTicks(
+        #     [[(x, str(x)) for x in range(self.SPECTRUM_MIN, self.SPECTRUM_MAX + 20, 20)]])
+        # spectrumCurve = spectrumPlot.plot()
+        # spectrumCurve.setData(self.maxSpectrum, self.spectrumScale)
+
+        spectrumPlot.setTitle(title='Power Spectral Density', **self.titleStyle)
+        spectrumPlot.setLabel('bottom', 'frequency (Hz)', **self.labelStyle)
+        spectrumPlot.setLabel('left', 'power spectral density (dBFS)', **self.labelStyle)
+        spectrumPlot.getAxis('left').tickFont = self.font
+        spectrumPlot.getAxis('bottom').tickFont = self.font
         spectrumPlot.getPlotItem().setLogMode(True, False)
-        spectrumPlot.getPlotItem().setRange(yRange=[self.SPECTRUM_MIN, self.SPECTRUM_MAX])
+        spectrumPlot.getPlotItem().setRange(
+            xRange=[0, np.floor(np.log10(self.SAMPLE_RATE // 2))], 
+            yRange=[self.SPECTRUM_MIN, self.SPECTRUM_MAX])
         spectrumPlot.getAxis('left').setTicks(
-            [[(x, str(x)) for x in range(self.SPECTRUM_MIN, self.SPECTRUM_MAX + 20, 20)]])
-        spectrumPlot.plot(self.spectrumScale, self.maxSpectrum)
+            [[(x, str(x)) for x in range(self.SPECTRUM_MIN, self.SPECTRUM_MAX, 20)]])
+        spectrumCurve = spectrumPlot.plot()
+        spectrumCurve.setData(self.spectrumScale, self.maxSpectrum)
 
         ImageExporter(spectrumPlot.plotItem).export('spectrum.png')
         ImageExporter(self.plots.timePlot.plotItem).export('timeseries.png')
