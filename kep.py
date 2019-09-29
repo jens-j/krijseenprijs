@@ -4,6 +4,7 @@ import sys
 import time
 import pprint
 import pyaudio
+import yaml
 from datetime import datetime
 from collections import deque
 
@@ -11,9 +12,10 @@ import numpy as np
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import pyqtgraph as pg
 from pyqtgraph.exporters import ImageExporter
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, \
+    QLabel, QSpacerItem
 from PyQt5.QtCore import pyqtSignal, QTimer, QObject, Qt
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QFont, QSizePolicy, QFont
 from PyQt5.uic import loadUi
 
 # TODO:
@@ -21,6 +23,8 @@ from PyQt5.uic import loadUi
 # - plot ticks
 # - grid
 # - pdf
+# - same name validator
+# - overlapping FFT windows
 
 class KrijsEenPrijs(QObject):
 
@@ -36,7 +40,8 @@ class KrijsEenPrijs(QObject):
     TIME_AXIS_SAMPLES       = SAMPLE_RATE * TIME_AXIS_LENGTH
     UPDATE_FREQ             = SAMPLE_RATE // CHUNK_SIZE
 
-    updateSignal = pyqtSignal()
+    updatePlotsSignal = pyqtSignal()
+    updateScoresSignal = pyqtSignal()
 
     def __init__(self):
 
@@ -53,13 +58,33 @@ class KrijsEenPrijs(QObject):
             -self.TIME_AXIS_LENGTH, 0, self.TIME_AXIS_SAMPLES / self.DECIMATION)
         self.logScaleSpectrogram = (np.log(range(1, self.FFT_SIZE // 2 + 2)) 
             / np.log(self.FFT_SIZE // 2 + 2) * self.FFT_SIZE // 2 + 1)
+
+        try:
+            with open('./globalscores.yaml') as f:
+                self.globalScores = yaml.load(f)
+            if self.globalScores == None:
+                self.globalScores = {}
+        except:
+            print('could not load global highscores')
+            self.globalScores = {}
+
+        try:
+            with open('./localscores.yaml') as f:
+                self.localScores = yaml.load(f)
+            if self.localScores == None:
+                self.localScores = {}
+        except:
+            print('could not load local highscores')
+            self.localScores = {}
         
         self.initPlotData()
         self.initGui()
-        self.updateSignal.connect(self.updateGui)
+        self.updatePlotsSignal.connect(self.updatePlots)
+        self.updateScoresSignal.connect(self.updateScores)
         self.stream = self.getStream()
         self.timer = QTimer()
-        self.timer.timeout.connect(self.updateGui)
+        self.timer.timeout.connect(self.updatePlots)
+        self.updateScoresSignal.emit()
         self.timer.start(self.SAMPLE_RATE / self.CHUNK_SIZE)
         self.timer.start()
 
@@ -71,13 +96,14 @@ class KrijsEenPrijs(QObject):
         self.spectrum    = np.ones(self.FFT_SIZE // 2 + 1, dtype=np.int16) * self.SPECTRUM_MIN
         self.maxSpectrum = np.ones(self.FFT_SIZE // 2 + 1, dtype=np.int16) * self.SPECTRUM_MIN
         self.spectrogram = np.ones((self.FFT_SIZE // 2 + 1, 
-                             self.TIME_AXIS_SAMPLES // (self.CHUNK_SIZE // self.CHUNK_DIVIDE)),
+                            self.TIME_AXIS_SAMPLES // (self.CHUNK_SIZE // self.CHUNK_DIVIDE)),
                             dtype=np.float32) * self.SPECTRUM_MIN
 
 
     def initGui(self):
 
-        self.ui = loadUi('kep.ui')
+        self.plots = loadUi('plots.ui')
+        self.scores = loadUi('scores.ui')
         pg.setConfigOptions(
             imageAxisOrder='row-major', background=pg.mkColor(0x0, 0x0, 0x100, 0x24))
 
@@ -85,27 +111,27 @@ class KrijsEenPrijs(QObject):
         font.setPixelSize(14)
         
         labelStyle = {'color': '#FFF', 'font-size': '20px'}
-        self.ui.timePlot.setLabel('left', 'amplitude', **labelStyle)
-        #self.ui.timePlot.setLabels(title='Amplitude', left='amplitude', bottom='s')
-        self.ui.timePlot.setRange(yRange=[-2**15, 2**15])
-        self.ui.timePlot.getAxis('left').tickFont = font
-        self.timeCurve = self.ui.timePlot.plot()
+        self.plots.timePlot.setLabel('left', 'amplitude', **labelStyle)
+        #self.plots.timePlot.setLabels(title='Amplitude', left='amplitude', bottom='s')
+        self.plots.timePlot.setRange(yRange=[-2**15, 2**15])
+        self.plots.timePlot.getAxis('left').tickFont = font
+        self.timeCurve = self.plots.timePlot.plot()
 
-        self.ui.spectrumPlot.setLabels(
+        self.plots.spectrumPlot.setLabels(
             title='Power Spectral Density', left='Hz', bottom='dBFS')
-        self.ui.spectrumPlot.getPlotItem().setLogMode(False, True)
-        self.ui.spectrumPlot.getPlotItem().setRange(xRange=[self.SPECTRUM_MIN, self.SPECTRUM_MAX])
-        self.ui.spectrumPlot.getAxis('bottom').setTicks(
+        self.plots.spectrumPlot.getPlotItem().setLogMode(False, True)
+        self.plots.spectrumPlot.getPlotItem().setRange(xRange=[self.SPECTRUM_MIN, self.SPECTRUM_MAX])
+        self.plots.spectrumPlot.getAxis('bottom').setTicks(
             [[(x, str(x)) for x in range(self.SPECTRUM_MIN, self.SPECTRUM_MAX + 20, 20)]])
-        self.ui.spectrumPlot.getAxis('left').setTicks(
-            [[(x, str(x)) for x in [10, 100, 1000, 10000]]])
-        self.spectrumCurve = self.ui.spectrumPlot.plot()
-        self.spectrumMaxCurve = self.ui.spectrumPlot.plot()
+        # self.plots.spectrumPlot.getAxis('left').setTicks(
+        #     [[(x, str(x)) for x in [10, 100, 1000, 10000]]])
+        self.spectrumCurve = self.plots.spectrumPlot.plot()
+        self.spectrumMaxCurve = self.plots.spectrumPlot.plot()
         
         self.spectrogramImage = pg.ImageItem()
-        self.ui.spectrogramPlot.setLabels(title='Spectrogram', left='FFT bin', bottom='s')
+        self.plots.spectrogramPlot.setLabels(title='Spectrogram', left='FFT bin', bottom='s')
 
-        self.ui.spectrogramPlot.addItem(self.spectrogramImage)
+        self.plots.spectrogramPlot.addItem(self.spectrogramImage)
         self.spectrogramImage.setLevels([-160, 0])
 
         pos = np.array([0., 0.3, 0.7, 1.0])
@@ -118,13 +144,16 @@ class KrijsEenPrijs(QObject):
         lut = cmap.getLookupTable(0.0, 1.0, 256)
         self.spectrogramImage.setLookupTable(lut)
 
-        self.ui.startButton.clicked.connect(self.start)
-        self.ui.stopButton.clicked.connect(self.stop)
-        self.ui.saveButton.clicked.connect(self.save)
-        self.ui.resetButton.clicked.connect(self.reset)
+        self.plots.startButton.clicked.connect(self.start)
+        self.plots.stopButton.clicked.connect(self.stop)
+        self.plots.saveButton.clicked.connect(self.save)
+        self.plots.resetButton.clicked.connect(self.reset)
 
-        self.ui.resize(1920, 1080)
-        self.ui.show()
+        self.plots.resize(1920, 1080)
+        self.plots.show()
+
+        self.scores.resize(1920, 1080)
+        self.scores.show()
 
 
     def getSpectrum(self, data):
@@ -140,7 +169,7 @@ class KrijsEenPrijs(QObject):
         return spectrum
 
 
-    def updateGui(self):
+    def updatePlots(self):
 
         t1 = datetime.now()
 
@@ -166,15 +195,16 @@ class KrijsEenPrijs(QObject):
             self.spectrogram = np.column_stack([self.spectrogram, np.float32(self.spectrum)])
 
 
-        maxPower = np.amax(self.spectrum)
+        maxPower = float(np.amax(self.spectrum))
         if maxPower > self.maxPower:
             self.maxPower = maxPower
-            self.maxFrequency = np.where(self.spectrum == maxPower)[0][0] * self.FFT_RESOLUTION
+            self.maxFrequency = float(np.where(
+                self.spectrum == maxPower)[0][0] * self.FFT_RESOLUTION)
 
         t2 = datetime.now()
         
-        self.ui.lblPower.setText('{:.2f} dBFS'.format(self.maxPower))
-        self.ui.lblFrequency.setText('{} Hz'.format(self.maxFrequency))
+        self.plots.lblPower.setText('{:.2f} dBFS'.format(self.maxPower))
+        self.plots.lblFrequency.setText('{} Hz'.format(self.maxFrequency))
 
         self.spectrogramImage.setImage(self.spectrogram, autoLevels=False)
         self.timeCurve.setData(self.timeAxis, self.audioData[::self.DECIMATION])
@@ -191,6 +221,59 @@ class KrijsEenPrijs(QObject):
 
         self.t0 = t1
 
+
+    def clearLayout(self, layout):
+
+        for i in reversed(range(layout.count())): 
+
+            item = layout.itemAt(i)
+
+            if isinstance(item, QHBoxLayout):
+                self.clearLayout(item)
+            elif isinstance(item, QSpacerItem):
+                layout.removeItem(item)
+            else:
+                widget = item.widget()
+                layout.removeWidget(widget)
+                widget.setParent(None)
+
+
+    def updateRanking(self, layout, scores, index, unit, reverse=False):
+
+        self.clearLayout(layout)
+        ranking = sorted(scores, key=lambda x: scores[x][index])
+        font = QFont("Sans Serif", 12) 
+
+        for i, name in enumerate(ranking[:10]):
+            
+            nameLabel = QLabel('{}'.format(name))
+            nameLabel.setAlignment(Qt.AlignLeft)
+            nameLabel.setFont(font)
+
+            scoreLabel = QLabel('{:.2f} {}'.format(scores[name][index], unit))
+            scoreLabel.setAlignment(Qt.AlignRight)
+            scoreLabel.setFont(font)
+
+            entry = QHBoxLayout()
+            entry.addWidget(nameLabel)
+            entry.addWidget(scoreLabel)
+            layout.addLayout(entry)
+
+        layout.addItem(QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
+
+
+    def updateScores(self):
+
+        self.updateRanking(self.scores.boxGlobalLoudest.layout(), self.globalScores, 0, 'dBFS')
+        self.updateRanking(self.scores.boxGlobalHighest.layout(), self.globalScores, 1, 'Hz')
+        self.updateRanking(self.scores.boxGlobalLowest.layout(), self.globalScores, 1, 'Hz', 
+            reverse=True)
+
+        self.updateRanking(self.scores.boxLocalLoudest.layout(), self.localScores, 0, 'dBFS')
+        self.updateRanking(self.scores.boxLocalHighest.layout(), self.localScores, 1, 'Hz')
+        self.updateRanking(self.scores.boxLocalLowest.layout(), self.localScores, 1, 'Hz', 
+            reverse=True)
+        
 
     def streamCallback(self, inputData, frameCount, timeInfo, status):
 
@@ -236,6 +319,20 @@ class KrijsEenPrijs(QObject):
     def save(self):
         self.timer.stop()
 
+        name = self.plots.lineName.text()
+
+        # update highscores
+        self.globalScores[name] = [self.maxPower, self.maxFrequency]
+        with open('globalscores.yaml', 'w') as f:
+            yaml.dump(self.globalScores, f)
+
+        self.localScores[name] = [self.maxPower, self.maxFrequency]
+        with open('localscores.yaml', 'w') as f:
+            yaml.dump(self.localScores, f)
+
+        # update scores window
+        self.updateScoresSignal.emit()
+
         # create rotated version of spectrum
         spectrumPlot = pg.PlotWidget()
         spectrumPlot.setLabels(
@@ -247,14 +344,14 @@ class KrijsEenPrijs(QObject):
         spectrumPlot.plot(self.spectrumScale, self.maxSpectrum)
 
         ImageExporter(spectrumPlot.plotItem).export('spectrum.png')
-        ImageExporter(self.ui.timePlot.plotItem).export('timeseries.png')
-        ImageExporter(self.ui.spectrogramPlot.plotItem).export('spectrogram.png')
+        ImageExporter(self.plots.timePlot.plotItem).export('timeseries.png')
+        ImageExporter(self.plots.spectrogramPlot.plotItem).export('spectrogram.png')
 
 
     def reset(self):
         self.initPlotData()
         self.deque.append(np.zeros(self.CHUNK_SIZE))
-        self.updateSignal.emit()
+        self.updatePlotsSignal.emit()
 
 
 def main():
