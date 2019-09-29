@@ -25,6 +25,7 @@ from PyQt5.uic import loadUi
 # - pdf
 # - same name validator
 # - overlapping FFT windows
+# - calibration
 
 class KrijsEenPrijs(QObject):
 
@@ -32,7 +33,7 @@ class KrijsEenPrijs(QObject):
     SAMPLE_RATE             = 48000 # Hz
     DECIMATION              = 32
     CHUNK_SIZE              = 2**11
-    CHUNK_DIVIDE            = 2
+    FFT_RATE                = 2**10
     FFT_SIZE                = 2**12
     FFT_RESOLUTION          = SAMPLE_RATE // FFT_SIZE
     SPECTRUM_MIN            = -160
@@ -83,7 +84,7 @@ class KrijsEenPrijs(QObject):
         self.updateScoresSignal.connect(self.updateScores)
         self.stream = self.getStream()
         self.timer = QTimer()
-        self.timer.timeout.connect(self.updatePlots)
+        self.timer.timeout.connect(self.updateData)
         self.updateScoresSignal.emit()
         self.timer.start(self.SAMPLE_RATE / self.CHUNK_SIZE)
         self.timer.start()
@@ -96,7 +97,7 @@ class KrijsEenPrijs(QObject):
         self.spectrum    = np.ones(self.FFT_SIZE // 2 + 1, dtype=np.int16) * self.SPECTRUM_MIN
         self.maxSpectrum = np.ones(self.FFT_SIZE // 2 + 1, dtype=np.int16) * self.SPECTRUM_MIN
         self.spectrogram = np.ones((self.FFT_SIZE // 2 + 1, 
-                            self.TIME_AXIS_SAMPLES // (self.CHUNK_SIZE // self.CHUNK_DIVIDE)),
+                            self.TIME_AXIS_SAMPLES // self.FFT_RATE),
                             dtype=np.float32) * self.SPECTRUM_MIN
 
 
@@ -158,8 +159,7 @@ class KrijsEenPrijs(QObject):
 
     def getSpectrum(self, data):
 
-        data = data * np.hanning(len(data))
-        data = np.concatenate([data, np.zeros(self.FFT_SIZE - len(data))])
+        data = data * np.hanning(self.FFT_SIZE)
 
         spectrum = np.fft.rfft(data[-self.FFT_SIZE:])
         spectrum = np.abs(spectrum) * 2 / self.FFT_SIZE
@@ -169,9 +169,7 @@ class KrijsEenPrijs(QObject):
         return spectrum
 
 
-    def updatePlots(self):
-
-        t1 = datetime.now()
+    def updateData(self):
 
         if len(self.deque) == 0:
             print('no data in queue')
@@ -181,14 +179,15 @@ class KrijsEenPrijs(QObject):
         self.audioData = np.append(self.audioData, newData)
         self.audioData = self.audioData[-self.TIME_AXIS_SAMPLES:]
 
-        # process two spectra for every GUI update
-        for i in range(self.CHUNK_DIVIDE):
+        # process n spectra for every GUI update
+        n = self.CHUNK_SIZE // self.FFT_RATE
+        for i in range(n):
 
-            length = self.CHUNK_SIZE // self.CHUNK_DIVIDE
-            x = (-self.CHUNK_DIVIDE + i) * length 
-            y = (-self.CHUNK_DIVIDE + 1 + i) * length
+            x = self.FFT_SIZE + (n - 1 - i) * self.FFT_RATE
+            y = (n - 1 - i) * self.FFT_RATE
 
-            fftData = newData[x:] if y == 0 else newData[x:y]
+            fftData = self.audioData[-x:] if y == 0 else self.audioData[-x:-y]
+
             self.spectrum = self.getSpectrum(fftData)
             self.maxSpectrum = np.maximum(self.maxSpectrum, self.spectrum)
             self.spectrogram = self.spectrogram[:,1:]
@@ -201,8 +200,11 @@ class KrijsEenPrijs(QObject):
             self.maxFrequency = float(np.where(
                 self.spectrum == maxPower)[0][0] * self.FFT_RESOLUTION)
 
-        t2 = datetime.now()
-        
+        self.updatePlots()
+
+
+    def updatePlots(self):
+
         self.plots.lblPower.setText('{:.2f} dBFS'.format(self.maxPower))
         self.plots.lblFrequency.setText('{} Hz'.format(self.maxFrequency))
 
@@ -211,15 +213,6 @@ class KrijsEenPrijs(QObject):
         self.spectrumCurve.setData(self.spectrum, self.spectrumScale)
         self.spectrumMaxCurve.setData(self.maxSpectrum, self.spectrumScale, 
             pen=pg.mkPen('r'))#, style=Qt.DotLine))
-
-        t3 = datetime.now()
-
-        # print('{} ms calc, {} ms plot, {} ms update'.format(
-        #     int((t2 - t1).total_seconds() * 1000),
-        #     int((t3 - t2).total_seconds() * 1000),
-        #     int((t1 - self.t0).total_seconds() * 1000)))
-
-        self.t0 = t1
 
 
     def clearLayout(self, layout):
