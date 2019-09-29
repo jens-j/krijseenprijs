@@ -15,7 +15,7 @@ from pyqtgraph.exporters import ImageExporter
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, \
     QLabel, QSpacerItem
 from PyQt5.QtCore import pyqtSignal, QTimer, QObject, Qt
-from PyQt5.QtGui import QFont, QSizePolicy, QFont
+from PyQt5.QtGui import QFont, QSizePolicy, QFont, QPixmap
 from PyQt5.uic import loadUi
 
 # TODO:
@@ -23,7 +23,7 @@ from PyQt5.uic import loadUi
 # - plot ticks
 # - grid
 # - pdf
-# - same name validator
+# - same name popup
 # - overlapping FFT windows
 # - calibration
 # - sron logo
@@ -36,7 +36,9 @@ class KrijsEenPrijs(QObject):
     CHUNK_SIZE              = 2**11
     FFT_RATE                = 2**10
     FFT_SIZE                = 2**12
+    LONG_FFT_SIZE           = 2**16
     FFT_RESOLUTION          = SAMPLE_RATE // FFT_SIZE
+    LONG_FFT_RESOLUTION     = SAMPLE_RATE // LONG_FFT_SIZE
     SPECTRUM_MIN            = -160
     SPECTRUM_MAX            = 0
     TIME_AXIS_SAMPLES       = SAMPLE_RATE * TIME_AXIS_LENGTH
@@ -106,7 +108,6 @@ class KrijsEenPrijs(QObject):
 
 
     def initPlotsGui(self):
-
         
         pg.setConfigOptions(
             imageAxisOrder='row-major', background=pg.mkColor(0x0, 0x0, 0x100, 0x24))
@@ -115,10 +116,12 @@ class KrijsEenPrijs(QObject):
 
         self.font = QFont()
         self.font.setPixelSize(14)
-        self.labelStyle = {'color': '#FFF', 'font-size': '14px'}
-        self.titleStyle = {'color': '#FFF', 'font-size': '18px'}
+        self.labelStyle = {'color': '#FFF', 'font-size': '16px'}
+        self.titleStyle = {'color': '#FFF', 'font-size': '40px'}
 
-        self.plots.timePlot.setTitle('Microphone Signal', **self.labelStyle)
+        self.plots.labelLogo.setPixmap(QPixmap('sron_small.png'))
+
+        self.plots.timePlot.setTitle('Microphone Signal', **self.titleStyle)
         self.plots.timePlot.setLabel('left', 'amplitude', **self.labelStyle)
         self.plots.timePlot.setLabel('bottom', 'time (s)', **self.labelStyle)
         self.plots.timePlot.getAxis('left').tickFont = self.font
@@ -202,10 +205,12 @@ class KrijsEenPrijs(QObject):
 
     def getSpectrum(self, data):
 
-        data = data * np.hanning(self.FFT_SIZE)
+        SIZE = len(data)
 
-        spectrum = np.fft.rfft(data[-self.FFT_SIZE:])
-        spectrum = np.abs(spectrum) * 2 / self.FFT_SIZE
+        data = data * np.hanning(SIZE)
+
+        spectrum = np.fft.rfft(data[-SIZE:])
+        spectrum = np.abs(spectrum) * 2 / SIZE
         spectrum[spectrum == 0] = 1E-6
         spectrum = 10 * np.log(spectrum / 2**15)
 
@@ -236,12 +241,12 @@ class KrijsEenPrijs(QObject):
             self.spectrogram = self.spectrogram[:,1:]
             self.spectrogram = np.column_stack([self.spectrogram, np.float32(self.spectrum)])
 
-
-        maxPower = float(np.amax(self.spectrum))
+        self.longSpectrum = self.getSpectrum(self.audioData[-self.LONG_FFT_SIZE:])
+        maxPower = float(np.amax(self.longSpectrum))
         if maxPower > self.maxPower:
             self.maxPower = maxPower
             self.maxFrequency = float(np.where(
-                self.spectrum == maxPower)[0][0] * self.FFT_RESOLUTION)
+                self.longSpectrum == maxPower)[0][0] * self.LONG_FFT_RESOLUTION)
 
         self.updatePlots()
 
@@ -249,7 +254,7 @@ class KrijsEenPrijs(QObject):
     def updatePlots(self):
 
         self.plots.lblPower.setText('{:.2f} dBFS'.format(self.maxPower))
-        self.plots.lblFrequency.setText('{} Hz'.format(self.maxFrequency))
+        self.plots.lblFrequency.setText('{:.2f} Hz'.format(self.maxFrequency))
 
         self.spectrogramImage.setImage(self.spectrogram, autoLevels=False)
         self.timeCurve.setData(self.timeAxis, self.audioData[::self.DECIMATION])
@@ -277,7 +282,7 @@ class KrijsEenPrijs(QObject):
     def updateRanking(self, layout, scores, index, unit, reverse=False):
 
         self.clearLayout(layout)
-        ranking = sorted(scores, key=lambda x: scores[x][index])
+        ranking = sorted(scores, key=lambda x: scores[x][index], reverse=reverse)
         font = QFont("Sans Serif", 12) 
 
         for i, name in enumerate(ranking[:10]):
