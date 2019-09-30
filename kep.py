@@ -27,8 +27,9 @@ from PyQt5.uic import loadUi
 # - same name popup
 # - overlapping FFT windows
 # - calibration
-# - sron logo
 # - save wav
+# - speed issues
+
 
 class KrijsEenPrijs(QObject):
 
@@ -38,10 +39,10 @@ class KrijsEenPrijs(QObject):
     CHUNK_SIZE              = 2**11
     FFT_RATE                = 2**10
     FFT_SIZE                = 2**12
-    LONG_FFT_SIZE           = 2**16
+    LONG_FFT_SIZE           = 2**13
     FFT_RESOLUTION          = SAMPLE_RATE // FFT_SIZE
     LONG_FFT_RESOLUTION     = SAMPLE_RATE // LONG_FFT_SIZE
-    SPECTRUM_MIN            = -160
+    SPECTRUM_MIN            = -240
     SPECTRUM_MAX            = 0
     TIME_AXIS_SAMPLES       = SAMPLE_RATE * TIME_AXIS_LENGTH
     UPDATE_FREQ             = SAMPLE_RATE // CHUNK_SIZE
@@ -211,10 +212,10 @@ class KrijsEenPrijs(QObject):
 
         SIZE = len(data)
 
-        data = data * np.hanning(SIZE)
+        data = data * np.hanning(SIZE) 
 
         spectrum = np.fft.rfft(data[-SIZE:])
-        spectrum = np.abs(spectrum) * 2 / SIZE
+        spectrum = np.abs(spectrum) * 2 / SIZE # sum(window)
         spectrum[spectrum == 0] = 1E-6
         spectrum = 10 * np.log(spectrum / 2**15)
 
@@ -223,16 +224,25 @@ class KrijsEenPrijs(QObject):
 
     def updateData(self):
 
+        print(len(self.deque))
+
         if len(self.deque) == 0:
             print('no data in queue')
             return
 
-        newData = self.deque.popleft()
+        n = 0
+        newData = []
+        while len(self.deque) > 0:
+            newData.extend(self.deque.popleft())
+            n += self.CHUNK_SIZE // self.FFT_RATE
+
+        print(self.CHUNK_SIZE // self.FFT_RATE)
+
         self.audioData = np.append(self.audioData, newData)
         self.audioData = self.audioData[-self.TIME_AXIS_SAMPLES:]
 
         # process n spectra for every GUI update
-        n = self.CHUNK_SIZE // self.FFT_RATE
+        #n = self.CHUNK_SIZE // self.FFT_RATE
         for i in range(n):
 
             x = self.FFT_SIZE + (n - 1 - i) * self.FFT_RATE
@@ -243,7 +253,7 @@ class KrijsEenPrijs(QObject):
             self.spectrum = self.getSpectrum(fftData)
             self.maxSpectrum = np.maximum(self.maxSpectrum, self.spectrum)
 
-            # create log interpolation of the spectrum
+            create log interpolation of the spectrum
             SIZE = self.FFT_SIZE // 2 + 1
             linRange = np.array(np.arange(SIZE))
             logRange = (1 - np.log10(SIZE - linRange) / np.log10(SIZE)) * (SIZE - 1)
@@ -258,6 +268,7 @@ class KrijsEenPrijs(QObject):
 
             self.spectrogram = self.spectrogram[:,1:]
             self.spectrogram = np.column_stack([self.spectrogram, f(logRange)])
+            #self.spectrogram = np.column_stack([self.spectrogram, self.spectrum])
 
         # create higher precision spectrum for score
         self.longSpectrum = self.getSpectrum(self.audioData[-self.LONG_FFT_SIZE:])
