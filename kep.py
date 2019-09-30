@@ -33,16 +33,16 @@ from PyQt5.uic import loadUi
 
 class KrijsEenPrijs(QObject):
 
-    TIME_AXIS_LENGTH        = 8    # s
+    TIME_AXIS_LENGTH        = 8     # s
     SAMPLE_RATE             = 48000 # Hz
-    DECIMATION              = 32
-    CHUNK_SIZE              = 2**11
-    FFT_RATE                = 2**10
-    FFT_SIZE                = 2**12
-    LONG_FFT_SIZE           = 2**13
+    DECIMATION              = 32    # sample decimation factor for time plot
+    CHUNK_SIZE              = 2**11 # determines max plot framerate -> ~23.4 Hz
+    FFT_RATE                = 2**10 # length of new audio data for each spectral update -> ~46.9 Hz time resolution in spectrogram
+    FFT_SIZE                = 2**11 # old samples are used to pad fft 
+    LONG_FFT_SIZE           = 2**15 # high resolution fft used only for scores
     FFT_RESOLUTION          = SAMPLE_RATE // FFT_SIZE
     LONG_FFT_RESOLUTION     = SAMPLE_RATE // LONG_FFT_SIZE
-    SPECTRUM_MIN            = -240
+    SPECTRUM_MIN            = -160
     SPECTRUM_MAX            = 0
     TIME_AXIS_SAMPLES       = SAMPLE_RATE * TIME_AXIS_LENGTH
     UPDATE_FREQ             = SAMPLE_RATE // CHUNK_SIZE
@@ -142,8 +142,8 @@ class KrijsEenPrijs(QObject):
             xRange=[self.SPECTRUM_MIN, self.SPECTRUM_MAX])
         self.plots.spectrumPlot.getAxis('bottom').setTicks(
             [[(x, str(x)) for x in range(self.SPECTRUM_MIN, self.SPECTRUM_MAX + 20, 20)]])
-        # self.plots.spectrumPlot.getAxis('left').setTicks(
-        #     [[(x, str(x)) for x in [10, 100, 1000, 10000]]])
+        self.plots.spectrumPlot.getAxis('left').setTicks(
+            [[(x, str(int(10**x))) for x in [1, 2, 3, 4, 5]]])
         
         self.timeCurve = self.plots.timePlot.plot()
         self.spectrumCurve = self.plots.spectrumPlot.plot()
@@ -231,15 +231,14 @@ class KrijsEenPrijs(QObject):
             return
 
         n = 0
-        newData = []
+        newData = np.array([], dtype=np.int16)
         while len(self.deque) > 0:
-            newData.extend(self.deque.popleft())
+            newData = np.concatenate((newData, self.deque.popleft()))
             n += self.CHUNK_SIZE // self.FFT_RATE
 
-        print(self.CHUNK_SIZE // self.FFT_RATE)
-
-        self.audioData = np.append(self.audioData, newData)
-        self.audioData = self.audioData[-self.TIME_AXIS_SAMPLES:]
+        self.audioData = np.roll(self.audioData, -len(newData))
+        self.audioData[-len(newData):] = newData
+        #self.audioData = self.audioData[-self.TIME_AXIS_SAMPLES:]
 
         # process n spectra for every GUI update
         #n = self.CHUNK_SIZE // self.FFT_RATE
@@ -253,7 +252,7 @@ class KrijsEenPrijs(QObject):
             self.spectrum = self.getSpectrum(fftData)
             self.maxSpectrum = np.maximum(self.maxSpectrum, self.spectrum)
 
-            create log interpolation of the spectrum
+            # create log interpolation of the spectrum
             SIZE = self.FFT_SIZE // 2 + 1
             linRange = np.array(np.arange(SIZE))
             logRange = (1 - np.log10(SIZE - linRange) / np.log10(SIZE)) * (SIZE - 1)
@@ -351,8 +350,9 @@ class KrijsEenPrijs(QObject):
 
     def streamCallback(self, inputData, frameCount, timeInfo, status):
 
-        data = np.fromstring(inputData, np.int16)
-        self.deque.append(data)
+        if self.timer.isActive():
+            data = np.fromstring(inputData, np.int16)
+            self.deque.append(data)
 
         return (inputData, pyaudio.paContinue)
 
@@ -443,4 +443,5 @@ def main():
     
 
 if __name__ == '__main__':
+    
     main()
