@@ -38,10 +38,10 @@ class KrijsEenPrijs(QObject):
     DECIMATION              = 32    # sample decimation factor for time plot
     CHUNK_SIZE              = 2**11 # determines max plot framerate -> ~23.4 Hz
     FFT_RATE                = 2**10 # length of new audio data for each spectral update -> ~46.9 Hz time resolution in spectrogram
-    FFT_SIZE                = 2**11 # old samples are used to pad fft 
-    LONG_FFT_SIZE           = 2**15 # high resolution fft used only for scores
-    FFT_RESOLUTION          = SAMPLE_RATE // FFT_SIZE
-    LONG_FFT_RESOLUTION     = SAMPLE_RATE // LONG_FFT_SIZE
+    FFT_SIZE                = 2**12 # old samples are used to pad fft 
+    LONG_FFT_SIZE           = 2**16 # high resolution fft used only for scores
+    FFT_RESOLUTION          = SAMPLE_RATE / FFT_SIZE
+    LONG_FFT_RESOLUTION     = SAMPLE_RATE / LONG_FFT_SIZE
     SPECTRUM_MIN            = -160
     SPECTRUM_MAX            = 0
     TIME_AXIS_SAMPLES       = SAMPLE_RATE * TIME_AXIS_LENGTH
@@ -60,11 +60,11 @@ class KrijsEenPrijs(QObject):
         self.t0 = datetime.now()
         self.maxFrequency = 0
         self.maxPower = self.SPECTRUM_MIN
-        self.spectrumScale = np.linspace(0, self.SAMPLE_RATE / 2, self.FFT_SIZE / 2 + 1)
+        self.spectrumScale = np.linspace(0, self.SAMPLE_RATE / 2, self.FFT_SIZE / 2)
         self.timeAxis = np.linspace(
             -self.TIME_AXIS_LENGTH, 0, self.TIME_AXIS_SAMPLES / self.DECIMATION)
-        self.logScaleSpectrogram = (np.log(range(1, self.FFT_SIZE // 2 + 2)) 
-            / np.log(self.FFT_SIZE // 2 + 2) * self.FFT_SIZE // 2 + 1)
+        self.logScaleSpectrogram = (np.log(range(1, self.FFT_SIZE // 2 + 1)) 
+            / np.log(self.FFT_SIZE // 2 + 1) * self.FFT_SIZE // 2)
 
         try:
             with open('./globalscores.yaml') as f:
@@ -103,9 +103,9 @@ class KrijsEenPrijs(QObject):
 
         self.maxPower    = self.SPECTRUM_MIN
         self.audioData   = np.zeros(self.TIME_AXIS_SAMPLES, dtype=np.int16)
-        self.spectrum    = np.ones(self.FFT_SIZE // 2 + 1, dtype=np.int16) * self.SPECTRUM_MIN
-        self.maxSpectrum = np.ones(self.FFT_SIZE // 2 + 1, dtype=np.int16) * self.SPECTRUM_MIN
-        self.spectrogram = np.ones((self.FFT_SIZE // 2 + 1, 
+        self.spectrum    = np.ones(self.FFT_SIZE // 2, dtype=np.int16) * self.SPECTRUM_MIN
+        self.maxSpectrum = np.ones(self.FFT_SIZE // 2, dtype=np.int16) * self.SPECTRUM_MIN
+        self.spectrogram = np.ones((self.FFT_SIZE // 2, 
                             self.TIME_AXIS_SAMPLES // self.FFT_RATE),
                             dtype=np.float32) * self.SPECTRUM_MIN
 
@@ -130,6 +130,7 @@ class KrijsEenPrijs(QObject):
         self.plots.timePlot.getAxis('left').tickFont = self.font
         self.plots.timePlot.getAxis('bottom').tickFont = self.font
         self.plots.timePlot.setRange(yRange=[-2**15, 2**15])
+        self.plots.timePlot.setMouseEnabled(x=False, y=False)
         
         self.plots.spectrumPlot.setTitle(title='Power Spectral Density', **self.titleStyle)
         self.plots.spectrumPlot.setLabel('left', 'frequency (Hz)', **self.labelStyle)
@@ -144,6 +145,7 @@ class KrijsEenPrijs(QObject):
             [[(x, str(x)) for x in range(self.SPECTRUM_MIN, self.SPECTRUM_MAX + 20, 20)]])
         self.plots.spectrumPlot.getAxis('left').setTicks(
             [[(x, str(int(10**x))) for x in [1, 2, 3, 4, 5]]])
+        self.plots.spectrumPlot.setMouseEnabled(x=False, y=False)
         
         self.timeCurve = self.plots.timePlot.plot()
         self.spectrumCurve = self.plots.spectrumPlot.plot()
@@ -155,6 +157,7 @@ class KrijsEenPrijs(QObject):
         self.plots.spectrogramPlot.setLabel('bottom', 'time (s)', **self.labelStyle)
         self.plots.spectrogramPlot.getAxis('left').tickFont = self.font
         self.plots.spectrogramPlot.getAxis('bottom').tickFont = self.font
+        self.plots.spectrogramPlot.setMouseEnabled(x=False, y=False)
         self.plots.spectrogramPlot.addItem(self.spectrogramImage)
         self.spectrogramImage.setLevels([-160, 0])
 
@@ -187,12 +190,14 @@ class KrijsEenPrijs(QObject):
         self.scores.powerHistogram.setLabel('bottom', 'Power (dBFS)', **self.labelStyle)
         self.scores.powerHistogram.getAxis('left').tickFont = self.font
         self.scores.powerHistogram.getAxis('bottom').tickFont = self.font
+        self.scores.powerHistogram.setMouseEnabled(x=False, y=False)
 
         self.scores.frequencyHistogram.setTitle('Main Frequency Distribution', **self.titleStyle)
         self.scores.frequencyHistogram.setLabel('left', '# of people', **self.labelStyle)
         self.scores.frequencyHistogram.setLabel('bottom', 'frequency (Hz)', **self.labelStyle)
         self.scores.frequencyHistogram.getAxis('left').tickFont = self.font
         self.scores.frequencyHistogram.getAxis('bottom').tickFont = self.font
+        self.scores.frequencyHistogram.setMouseEnabled(x=False, y=False)
 
         powerScores = [x[0] for x in self.globalScores.values()]
         y, x = np.histogram(powerScores, bins=np.linspace(-100, 0, 21))
@@ -200,7 +205,7 @@ class KrijsEenPrijs(QObject):
 
         frequencyScores = [x[1] for x in self.globalScores.values()]
         y, x = np.histogram(
-            frequencyScores, bins=np.linspace(0, self.SAMPLE_RATE // 4, self.FFT_SIZE // 4 + 1))
+            frequencyScores, bins=np.linspace(0, self.SAMPLE_RATE // 4, self.FFT_SIZE // 4))
         self.scores.frequencyHistogram.plot(x, y, stepMode=True, fillLevel=0, brush=(0,0,255,150))
 
         self.scores.setWindowTitle('High Scores')
@@ -219,22 +224,25 @@ class KrijsEenPrijs(QObject):
         spectrum[spectrum == 0] = 1E-6
         spectrum = 10 * np.log(spectrum / 2**15)
 
-        return spectrum
+        return spectrum[1:] # drop DC bin
 
 
     def updateData(self):
 
-        print(len(self.deque))
+        #print(len(self.deque))
 
         if len(self.deque) == 0:
-            print('no data in queue')
+            #print('no data in queue')
             return
 
-        n = 0
-        newData = np.array([], dtype=np.int16)
-        while len(self.deque) > 0:
-            newData = np.concatenate((newData, self.deque.popleft()))
-            n += self.CHUNK_SIZE // self.FFT_RATE
+        # n = 0
+        # newData = np.array([], dtype=np.int16)
+        # while len(self.deque) > 0:
+        #     newData = np.concatenate((newData, self.deque.popleft()))
+        #     n += self.CHUNK_SIZE // self.FFT_RATE
+
+        n = self.CHUNK_SIZE // self.FFT_RATE
+        newData = self.deque.popleft()
 
         self.audioData = np.roll(self.audioData, -len(newData))
         self.audioData[-len(newData):] = newData
@@ -253,15 +261,20 @@ class KrijsEenPrijs(QObject):
             self.maxSpectrum = np.maximum(self.maxSpectrum, self.spectrum)
 
             # create log interpolation of the spectrum
-            SIZE = self.FFT_SIZE // 2 + 1
-            linRange = np.array(np.arange(SIZE))
-            logRange = (1 - np.log10(SIZE - linRange) / np.log10(SIZE)) * (SIZE - 1)
+            SIZE = self.FFT_SIZE // 2
+
+            #linRange = np.array(np.arange(SIZE))
+            linRange = np.linspace(10, 24000, 2048)
+            
+            #logRange = (1 - np.log10(SIZE - linRange) / np.log10(SIZE)) * (SIZE - 1)
+            #logRange = 10**(0.0021387 * x) + 9
+            logRange = 4.673 * np.log10(linRange) - 4.459
 
             f = interp1d(linRange, self.spectrum, kind='cubic')
 
             # print('')
-            # print(linRange)
-            # print(logRange)
+            print(linRange)
+            print(logRange)
             # print(f(linRange))
             # print(f(logRange))
 
@@ -271,11 +284,16 @@ class KrijsEenPrijs(QObject):
 
         # create higher precision spectrum for score
         self.longSpectrum = self.getSpectrum(self.audioData[-self.LONG_FFT_SIZE:])
-        maxPower = float(np.amax(self.longSpectrum))
+        maxPower = np.amax(self.longSpectrum)
         if maxPower > self.maxPower:
-            self.maxPower = maxPower
+            print('')
+            print(maxPower)
+            print(np.where(self.longSpectrum == maxPower)[0][0])
+            self.maxPower = float(maxPower)
             self.maxFrequency = float(np.where(
-                self.longSpectrum == maxPower)[0][0] * self.LONG_FFT_RESOLUTION)
+                self.longSpectrum == maxPower)[0][0]) * self.LONG_FFT_RESOLUTION
+
+            print(self.maxFrequency)
 
         self.updatePlots()
 
@@ -284,6 +302,8 @@ class KrijsEenPrijs(QObject):
 
         self.plots.lblPower.setText('{:.2f} dBFS'.format(self.maxPower))
         self.plots.lblFrequency.setText('{:.2f} Hz'.format(self.maxFrequency))
+
+        print(self.spectrumScale)
 
         self.spectrogramImage.setImage(self.spectrogram, autoLevels=False)
         self.timeCurve.setData(self.timeAxis, self.audioData[::self.DECIMATION])
@@ -367,8 +387,8 @@ class KrijsEenPrijs(QObject):
         #self.pp.pprint(devices)
         inputDevices = list(filter(lambda x: x[1]['maxInputChannels'] > 0, devices))
         usbMicrophones = \
-            list(filter(lambda x: 'default' in x[1]['name'], inputDevices))
-            #list(filter(lambda x: 'USB PnP Audio Device' in x[1]['name'], inputDevices))
+            list(filter(lambda x: 'USB PnP Audio Device' in x[1]['name'], inputDevices))
+            #list(filter(lambda x: 'default' in x[1]['name'], inputDevices))
 
         assert len(usbMicrophones) > 0, 'No microphone detected'
         mic = usbMicrophones[0][1]
@@ -416,11 +436,10 @@ class KrijsEenPrijs(QObject):
         spectrumPlot.getAxis('left').tickFont = self.font
         spectrumPlot.getAxis('bottom').tickFont = self.font
         spectrumPlot.getPlotItem().setLogMode(True, False)
-        spectrumPlot.getPlotItem().setRange(
-            xRange=[0, np.floor(np.log10(self.SAMPLE_RATE // 2))], 
-            yRange=[self.SPECTRUM_MIN, self.SPECTRUM_MAX])
+        spectrumPlot.getPlotItem().setRange(yRange=[self.SPECTRUM_MIN, self.SPECTRUM_MAX])
         spectrumPlot.getAxis('left').setTicks(
             [[(x, str(x)) for x in range(self.SPECTRUM_MIN, self.SPECTRUM_MAX, 20)]])
+        spectrumPlot.getAxis('bottom').setTicks([[(x, str(int(10**x))) for x in [1, 2, 3, 4, 5]]])
         spectrumCurve = spectrumPlot.plot()
         spectrumCurve.setData(self.spectrumScale, self.maxSpectrum)
 
