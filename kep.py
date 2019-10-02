@@ -222,7 +222,7 @@ class KrijsEenPrijs(QObject):
         spectrum = np.fft.rfft(data[-SIZE:])
         spectrum = np.abs(spectrum) * 2 / SIZE # sum(window)
         spectrum[spectrum == 0] = 1E-6
-        spectrum = 10 * np.log(spectrum / 2**15)
+        spectrum = 20 * np.log10(spectrum / 2**15)
 
         return spectrum[1:] # drop DC bin
 
@@ -235,21 +235,13 @@ class KrijsEenPrijs(QObject):
             #print('no data in queue')
             return
 
-        # n = 0
-        # newData = np.array([], dtype=np.int16)
-        # while len(self.deque) > 0:
-        #     newData = np.concatenate((newData, self.deque.popleft()))
-        #     n += self.CHUNK_SIZE // self.FFT_RATE
-
         n = self.CHUNK_SIZE // self.FFT_RATE
         newData = self.deque.popleft()
 
         self.audioData = np.roll(self.audioData, -len(newData))
         self.audioData[-len(newData):] = newData
-        #self.audioData = self.audioData[-self.TIME_AXIS_SAMPLES:]
 
         # process n spectra for every GUI update
-        #n = self.CHUNK_SIZE // self.FFT_RATE
         for i in range(n):
 
             x = self.FFT_SIZE + (n - 1 - i) * self.FFT_RATE
@@ -263,37 +255,20 @@ class KrijsEenPrijs(QObject):
             # create log interpolation of the spectrum
             SIZE = self.FFT_SIZE // 2
 
-            #linRange = np.array(np.arange(SIZE))
-            linRange = np.linspace(10, 24000, 2048)
-            
-            #logRange = (1 - np.log10(SIZE - linRange) / np.log10(SIZE)) * (SIZE - 1)
-            #logRange = 10**(0.0021387 * x) + 9
-            logRange = 4.673 * np.log10(linRange) - 4.459
-
+            linRange = np.array(np.arange(SIZE))
+            logRange = 10**(np.log10(SIZE) / SIZE * linRange) # (magic)
             f = interp1d(linRange, self.spectrum, kind='cubic')
-
-            # print('')
-            print(linRange)
-            print(logRange)
-            # print(f(linRange))
-            # print(f(logRange))
 
             self.spectrogram = self.spectrogram[:,1:]
             self.spectrogram = np.column_stack([self.spectrogram, f(logRange)])
-            #self.spectrogram = np.column_stack([self.spectrogram, self.spectrum])
 
         # create higher precision spectrum for score
         self.longSpectrum = self.getSpectrum(self.audioData[-self.LONG_FFT_SIZE:])
         maxPower = np.amax(self.longSpectrum)
         if maxPower > self.maxPower:
-            print('')
-            print(maxPower)
-            print(np.where(self.longSpectrum == maxPower)[0][0])
             self.maxPower = float(maxPower)
             self.maxFrequency = float(np.where(
                 self.longSpectrum == maxPower)[0][0]) * self.LONG_FFT_RESOLUTION
-
-            print(self.maxFrequency)
 
         self.updatePlots()
 
@@ -302,8 +277,6 @@ class KrijsEenPrijs(QObject):
 
         self.plots.lblPower.setText('{:.2f} dBFS'.format(self.maxPower))
         self.plots.lblFrequency.setText('{:.2f} Hz'.format(self.maxFrequency))
-
-        print(self.spectrumScale)
 
         self.spectrogramImage.setImage(self.spectrogram, autoLevels=False)
         self.timeCurve.setData(self.timeAxis, self.audioData[::self.DECIMATION])
