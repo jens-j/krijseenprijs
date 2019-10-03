@@ -42,12 +42,13 @@ class KrijsEenPrijs(QObject):
     LONG_FFT_SIZE           = 2**16 # high resolution fft used only for scores
     FFT_RESOLUTION          = SAMPLE_RATE / FFT_SIZE
     LONG_FFT_RESOLUTION     = SAMPLE_RATE / LONG_FFT_SIZE
-    SPECTRUM_MIN            = -160
-    SPECTRUM_MAX            = 0
+    SPECTRUM_MIN            = -20
+    SPECTRUM_MAX            = 120
     TIME_AXIS_SAMPLES       = SAMPLE_RATE * TIME_AXIS_LENGTH
     UPDATE_FREQ             = SAMPLE_RATE // CHUNK_SIZE
+    CALIBRATION             = 120
 
-    updatePlotsSignal = pyqtSignal()
+    updateDataSignal = pyqtSignal()
     updateScoresSignal = pyqtSignal()
 
     def __init__(self):
@@ -87,16 +88,13 @@ class KrijsEenPrijs(QObject):
         self.initPlotData()
         self.initPlotsGui()
         self.initScoresGui()
-        self.updatePlotsSignal.connect(self.updatePlots)
+        self.updateDataSignal.connect(self.updateData)
         self.updateScoresSignal.connect(self.updateScores)
         self.stream = self.getStream()
         self.timer = QTimer()
         self.timer.timeout.connect(self.updateData)
         self.updateScoresSignal.emit()
         self.timer.start(self.SAMPLE_RATE / self.CHUNK_SIZE)
-        self.timer.start()
-
-        print(self.spectrumScale)
 
 
     def initPlotData(self):
@@ -129,7 +127,7 @@ class KrijsEenPrijs(QObject):
         self.plots.timePlot.setLabel('bottom', 'time (s)', **self.labelStyle)
         self.plots.timePlot.getAxis('left').tickFont = self.font
         self.plots.timePlot.getAxis('bottom').tickFont = self.font
-        self.plots.timePlot.setRange(yRange=[-2**15, 2**15])
+        self.plots.timePlot.setRange(yRange=[1.2 * -2**15, 1.2 * 2**15])
         self.plots.timePlot.setMouseEnabled(x=False, y=False)
         
         self.plots.spectrumPlot.setTitle(title='Power Spectral Density', **self.titleStyle)
@@ -159,7 +157,7 @@ class KrijsEenPrijs(QObject):
         self.plots.spectrogramPlot.getAxis('bottom').tickFont = self.font
         self.plots.spectrogramPlot.setMouseEnabled(x=False, y=False)
         self.plots.spectrogramPlot.addItem(self.spectrogramImage)
-        self.spectrogramImage.setLevels([-160, 0])
+        self.spectrogramImage.setLevels([self.SPECTRUM_MIN, self.SPECTRUM_MAX])
 
         pos = np.array([0., 0.3, 0.7, 1.0])
         color = np.array([[0x0,  0x0,  0x24, 0xff], 
@@ -221,15 +219,18 @@ class KrijsEenPrijs(QObject):
 
         spectrum = np.fft.rfft(data[-SIZE:])
         spectrum = np.abs(spectrum) * 2 / SIZE # sum(window)
+        #spectrum = spectrum**2
         spectrum[spectrum == 0] = 1E-6
         spectrum = 20 * np.log10(spectrum / 2**15)
+        spectrum += self.CALIBRATION
+        spectrum = np.clip(spectrum, self.SPECTRUM_MIN, self.SPECTRUM_MAX)
 
         return spectrum[1:] # drop DC bin
 
 
     def updateData(self):
 
-        #print(len(self.deque))
+        print('l = {}'.format(len(self.deque)))
 
         if len(self.deque) == 0:
             #print('no data in queue')
@@ -346,6 +347,8 @@ class KrijsEenPrijs(QObject):
         if self.timer.isActive():
             data = np.fromstring(inputData, np.int16)
             self.deque.append(data)
+        # print('emit')
+        # self.updateDataSignal.emit()
 
         return (inputData, pyaudio.paContinue)
 
@@ -425,7 +428,7 @@ class KrijsEenPrijs(QObject):
     def reset(self):
         self.initPlotData()
         self.deque.append(np.zeros(self.CHUNK_SIZE))
-        self.updatePlotsSignal.emit()
+        self.updateDataSignal.emit()
 
 
 def main():
