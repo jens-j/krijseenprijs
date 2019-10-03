@@ -12,7 +12,7 @@ import numpy as np
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from scipy.interpolate import interp1d
 import pyqtgraph as pg
-from pyqtgraph.exporters import ImageExporter
+from pyqtgraph.exporters import ImageExporter, SVGExporter
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, \
     QLabel, QSpacerItem
 from PyQt5.QtCore import pyqtSignal, QTimer, QObject, Qt
@@ -150,6 +150,7 @@ class KrijsEenPrijs(QObject):
         self.spectrumMaxCurve = self.plots.spectrumPlot.plot()
         
         self.spectrogramImage = pg.ImageItem()
+        self.spectrogramImage.setLevels([self.SPECTRUM_MIN, self.SPECTRUM_MAX])
         self.plots.spectrogramPlot.setTitle('Spectrogram', **self.titleStyle)
         self.plots.spectrogramPlot.setLabel('left', 'FFT bin', **self.labelStyle)
         self.plots.spectrogramPlot.setLabel('bottom', 'time (s)', **self.labelStyle)
@@ -157,7 +158,6 @@ class KrijsEenPrijs(QObject):
         self.plots.spectrogramPlot.getAxis('bottom').tickFont = self.font
         self.plots.spectrogramPlot.setMouseEnabled(x=False, y=False)
         self.plots.spectrogramPlot.addItem(self.spectrogramImage)
-        self.spectrogramImage.setLevels([self.SPECTRUM_MIN, self.SPECTRUM_MAX])
 
         pos = np.array([0., 0.3, 0.7, 1.0])
         color = np.array([[0x0,  0x0,  0x24, 0xff], 
@@ -236,8 +236,15 @@ class KrijsEenPrijs(QObject):
             #print('no data in queue')
             return
 
-        n = self.CHUNK_SIZE // self.FFT_RATE
-        newData = self.deque.popleft()
+        n = 0
+        newData = np.array([])
+
+        while len(self.deque) > 0:
+            n += self.CHUNK_SIZE // self.FFT_RATE
+            newData = np.concatenate((newData, self.deque.popleft()))
+
+        # n = self.CHUNK_SIZE // self.FFT_RATE
+        # newData = self.deque.popleft()
 
         self.audioData = np.roll(self.audioData, -len(newData))
         self.audioData[-len(newData):] = newData
@@ -404,25 +411,40 @@ class KrijsEenPrijs(QObject):
         # update scores window
         self.updateScoresSignal.emit()
 
-        # create rotated version of spectrum
-        spectrumPlot = pg.PlotWidget()
-        spectrumPlot.setTitle(title='Power Spectral Density', **self.titleStyle)
-        spectrumPlot.setLabel('bottom', 'frequency (Hz)', **self.labelStyle)
-        spectrumPlot.setLabel('left', 'power spectral density (dBFS)', **self.labelStyle)
-        spectrumPlot.getAxis('left').tickFont = self.font
-        spectrumPlot.getAxis('bottom').tickFont = self.font
-        spectrumPlot.getPlotItem().setLogMode(True, False)
-        spectrumPlot.getPlotItem().setRange(yRange=[self.SPECTRUM_MIN, self.SPECTRUM_MAX])
-        spectrumPlot.getAxis('left').setTicks(
-            [[(x, str(x)) for x in range(self.SPECTRUM_MIN, self.SPECTRUM_MAX, 20)]])
-        spectrumPlot.getAxis('bottom').setTicks([[(x, str(int(10**x))) for x in [1, 2, 3, 4, 5]]])
-        spectrumCurve = spectrumPlot.plot()
-        spectrumCurve.setData(self.spectrumScale, self.maxSpectrum)
+        pen = pg.mkPen(color=(0, 0, 0), width=3)
+        pg.setConfigOption('background', 'w')
 
-        # export plots to png
-        ImageExporter(spectrumPlot.plotItem).export('spectrum.png')
-        ImageExporter(self.plots.timePlot.plotItem).export('timeseries.png')
-        ImageExporter(self.plots.spectrogramPlot.plotItem).export('spectrogram.png')
+        timePlot = pg.PlotWidget()
+        timePlot.setRange(yRange=[1.2 * -2**15, 1.2 * 2**15])
+        timePlot.setBackground(None)
+        timePlot.hideAxis('left')
+        timePlot.hideAxis('bottom')
+        timePlot.resize(800,200)
+        timeCurve = timePlot.plot(self.timeAxis, self.audioData[::self.DECIMATION], pen=pen)
+
+        # # create rotated version of spectrum
+        # spectrumPlot = pg.PlotWidget()
+        # spectrumPlot.setBackground(None)
+        # spectrumPlot.getPlotItem().setLogMode(True, False)
+        # spectrumPlot.getPlotItem().setRange(yRange=[self.SPECTRUM_MIN, self.SPECTRUM_MAX])
+        # spectrumPlot.getAxis('left').setTicks(
+        #     [[(x, str(x)) for x in range(self.SPECTRUM_MIN, self.SPECTRUM_MAX, 20)]])
+        # spectrumPlot.getAxis('bottom').setTicks([[(x, str(int(10**x))) for x in [1, 2, 3, 4, 5]]])
+        # spectrumCurve = spectrumPlot.plot(self.spectrumScale, self.maxSpectrum)
+
+        # # export plots to png
+        # exporter = ImageExporter(spectrumPlot.plotItem)
+        # exporter.parameters()['width'] = 2000
+        # exporter.export('spectrum.png')
+
+        exporter = ImageExporter(timePlot.plotItem)
+        exporter.parameters()['width'] = 2000
+        exporter.parameters()['width'] = 2000
+        exporter.export('timeseries.png')
+        
+        exporter =  ImageExporter(self.spectrogramImage)
+        exporter.parameters()['width'] = 2000
+        exporter.export('spectrogram.png')
 
 
     def reset(self):
