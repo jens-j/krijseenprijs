@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 
+import os
 import sys
 import time
 import pprint
 import pyaudio
 import yaml
+import time
+from subprocess import Popen, run, check_output
 from datetime import datetime
 from collections import deque
 
@@ -16,24 +19,21 @@ from pyqtgraph.exporters import ImageExporter, SVGExporter
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, \
     QLabel, QSpacerItem
 from PyQt5.QtCore import pyqtSignal, QTimer, QObject, Qt
-from PyQt5.QtGui import QFont, QSizePolicy, QFont, QPixmap
+from PyQt5.QtGui import QFont, QSizePolicy, QFont, QPixmap, QIntValidator
 from PyQt5.uic import loadUi
 
 # TODO:
-# - log spectrogram
 # - plot ticks
 # - grid
+# - minor ticks
 # - pdf
 # - same name popup
-# - overlapping FFT windows
-# - calibration
 # - save wav
-# - speed issues
 
 
 class KrijsEenPrijs(QObject):
 
-    TIME_AXIS_LENGTH        = 8     # s
+    TIME_AXIS_LENGTH        = 10   # s
     SAMPLE_RATE             = 48000 # Hz
     DECIMATION              = 32    # sample decimation factor for time plot
     CHUNK_SIZE              = 2**11 # determines max plot framerate -> ~23.4 Hz
@@ -47,6 +47,7 @@ class KrijsEenPrijs(QObject):
     TIME_AXIS_SAMPLES       = SAMPLE_RATE * TIME_AXIS_LENGTH
     UPDATE_FREQ             = SAMPLE_RATE // CHUNK_SIZE
     CALIBRATION             = 120
+    DEFAULT_PRINTER         = 'PU04'
 
     updateDataSignal = pyqtSignal()
     updateScoresSignal = pyqtSignal()
@@ -94,7 +95,8 @@ class KrijsEenPrijs(QObject):
         self.timer = QTimer()
         self.timer.timeout.connect(self.updateData)
         self.updateScoresSignal.emit()
-        self.timer.start(self.SAMPLE_RATE / self.CHUNK_SIZE)
+        #time.sleep(1)
+        self.timer.start(self.CHUNK_SIZE / self.SAMPLE_RATE * 1000 * 0.95)
 
 
     def initPlotData(self):
@@ -133,16 +135,19 @@ class KrijsEenPrijs(QObject):
         self.plots.spectrumPlot.setTitle(title='Power Spectral Density', **self.titleStyle)
         self.plots.spectrumPlot.setLabel('left', 'frequency (Hz)', **self.labelStyle)
         self.plots.spectrumPlot.setLabel(
-            'bottom', 'power spectral density (dBFS)', **self.labelStyle)
+            'bottom', 'power spectral density (dB', **self.labelStyle)
         self.plots.spectrumPlot.getAxis('left').tickFont = self.font
         self.plots.spectrumPlot.getAxis('bottom').tickFont = self.font
         self.plots.spectrumPlot.getPlotItem().setLogMode(False, True)
         self.plots.spectrumPlot.getPlotItem().setRange(
             xRange=[self.SPECTRUM_MIN, self.SPECTRUM_MAX])
+
         self.plots.spectrumPlot.getAxis('bottom').setTicks(
             [[(x, str(x)) for x in range(self.SPECTRUM_MIN, self.SPECTRUM_MAX + 20, 20)]])
+
         self.plots.spectrumPlot.getAxis('left').setTicks(
             [[(x, str(int(10**x))) for x in [1, 2, 3, 4, 5]]])
+
         self.plots.spectrumPlot.setMouseEnabled(x=False, y=False)
         
         self.timeCurve = self.plots.timePlot.plot()
@@ -152,8 +157,10 @@ class KrijsEenPrijs(QObject):
         self.spectrogramImage = pg.ImageItem()
         self.spectrogramImage.setLevels([self.SPECTRUM_MIN, self.SPECTRUM_MAX])
         self.plots.spectrogramPlot.setTitle('Spectrogram', **self.titleStyle)
-        self.plots.spectrogramPlot.setLabel('left', 'FFT bin', **self.labelStyle)
-        self.plots.spectrogramPlot.setLabel('bottom', 'time (s)', **self.labelStyle)
+        # self.plots.spectrogramPlot.setLabel('left', 'FFT bin', **self.labelStyle)
+        # self.plots.spectrogramPlot.setLabel('bottom', 'time (s)', **self.labelStyle)
+        self.plots.spectrogramPlot.setLabel('left', ' ', **self.labelStyle)
+        self.plots.spectrogramPlot.setLabel('bottom', ' ', **self.labelStyle)
         self.plots.spectrogramPlot.getAxis('left').tickFont = self.font
         self.plots.spectrogramPlot.getAxis('bottom').tickFont = self.font
         self.plots.spectrogramPlot.setMouseEnabled(x=False, y=False)
@@ -169,13 +176,31 @@ class KrijsEenPrijs(QObject):
         lut = cmap.getLookupTable(0.0, 1.0, 256)
         self.spectrogramImage.setLookupTable(lut)
 
+        ageValidator = QIntValidator(0, 1000)
+        self.plots.lineAge.setValidator(ageValidator)
+
+        # populate printer dropdown menu 
+        outp = check_output(['lpstat', '-p', '-d'])
+        print(outp)
+        print(outp.split(b'\n'))
+        for line in outp.split(b'\n'):
+            print(line)
+            words = line.split(b' ')
+            if words[0] == b'printer':
+                printername = words[1].strip().decode('utf-8')
+                self.plots.boxPrinter.addItem(printername)
+
+        index = self.plots.boxPrinter.findText(self.DEFAULT_PRINTER)
+        if index:
+            self.plots.boxPrinter.setCurrentIndex(index)
+
         self.plots.startButton.clicked.connect(self.start)
         self.plots.stopButton.clicked.connect(self.stop)
         self.plots.saveButton.clicked.connect(self.save)
         self.plots.resetButton.clicked.connect(self.reset)
 
         self.plots.setWindowTitle('Plots')
-        self.plots.resize(1920, 1080)
+        self.plots.resize(1920, 1200)
         self.plots.show()
 
 
@@ -185,7 +210,7 @@ class KrijsEenPrijs(QObject):
 
         self.scores.powerHistogram.setTitle('Power Score Distribution', **self.titleStyle)
         self.scores.powerHistogram.setLabel('left', '# of people', **self.labelStyle)
-        self.scores.powerHistogram.setLabel('bottom', 'Power (dBFS)', **self.labelStyle)
+        self.scores.powerHistogram.setLabel('bottom', 'Power (dB)', **self.labelStyle)
         self.scores.powerHistogram.getAxis('left').tickFont = self.font
         self.scores.powerHistogram.getAxis('bottom').tickFont = self.font
         self.scores.powerHistogram.setMouseEnabled(x=False, y=False)
@@ -197,17 +222,12 @@ class KrijsEenPrijs(QObject):
         self.scores.frequencyHistogram.getAxis('bottom').tickFont = self.font
         self.scores.frequencyHistogram.setMouseEnabled(x=False, y=False)
 
-        powerScores = [x[0] for x in self.globalScores.values()]
-        y, x = np.histogram(powerScores, bins=np.linspace(-100, 0, 21))
-        self.scores.powerHistogram.plot(x, y, stepMode=True, fillLevel=0, brush=(0,0,255,150))
-
-        frequencyScores = [x[1] for x in self.globalScores.values()]
-        y, x = np.histogram(
-            frequencyScores, bins=np.linspace(0, self.SAMPLE_RATE // 4, self.FFT_SIZE // 4))
-        self.scores.frequencyHistogram.plot(x, y, stepMode=True, fillLevel=0, brush=(0,0,255,150))
+        self.scores.boxPowerBins.valueChanged.connect(self.updateScores)
+        self.scores.boxFrequencyBins.valueChanged.connect(self.updateScores)
+        self.scores.actionNewRound.triggered.connect(self.clearRound)
 
         self.scores.setWindowTitle('High Scores')
-        self.scores.resize(1920, 1080)
+        self.scores.resize(1920, 1200)
         self.scores.show()
 
 
@@ -230,21 +250,23 @@ class KrijsEenPrijs(QObject):
 
     def updateData(self):
 
-        print('l = {}'.format(len(self.deque)))
+        #print('l = {}'.format(len(self.deque)))
 
         if len(self.deque) == 0:
-            #print('no data in queue')
             return
 
-        n = 0
-        newData = np.array([])
+        elif len(self.deque) < 3:
+            n = self.CHUNK_SIZE // self.FFT_RATE
+            newData = self.deque.popleft()
 
-        while len(self.deque) > 0:
-            n += self.CHUNK_SIZE // self.FFT_RATE
-            newData = np.concatenate((newData, self.deque.popleft()))
+        else: # catch up plotting
+            n = 0
+            newData = np.array([])
 
-        # n = self.CHUNK_SIZE // self.FFT_RATE
-        # newData = self.deque.popleft()
+            while len(self.deque) > 1:
+                n += self.CHUNK_SIZE // self.FFT_RATE
+                newData = np.concatenate((newData, self.deque.popleft()))
+
 
         self.audioData = np.roll(self.audioData, -len(newData))
         self.audioData[-len(newData):] = newData
@@ -283,7 +305,7 @@ class KrijsEenPrijs(QObject):
 
     def updatePlots(self):
 
-        self.plots.lblPower.setText('{:.2f} dBFS'.format(self.maxPower))
+        self.plots.lblPower.setText('{:.2f} dB'.format(self.maxPower))
         self.plots.lblFrequency.setText('{:.2f} Hz'.format(self.maxFrequency))
 
         self.spectrogramImage.setImage(self.spectrogram, autoLevels=False)
@@ -291,6 +313,15 @@ class KrijsEenPrijs(QObject):
         self.spectrumCurve.setData(self.spectrum, self.spectrumScale)
         self.spectrumMaxCurve.setData(self.maxSpectrum, self.spectrumScale, 
             pen=pg.mkPen('r'))
+
+
+    def clearRound(self):
+
+        print('clear')
+
+        self.localScores = {} 
+        self.dumpScores()
+        self.updateScores()
 
 
     def clearLayout(self, layout):
@@ -335,17 +366,33 @@ class KrijsEenPrijs(QObject):
 
     def updateScores(self):
 
-        self.updateRanking(self.scores.boxGlobalLowest.layout(), self.globalScores, 1, 'Hz')
-        self.updateRanking(self.scores.boxGlobalLoudest.layout(), self.globalScores, 0, 'dBFS', 
+        print('updatescores')
+        print(self.localScores)
+
+        self.updateRanking(self.scores.boxGlobalLowest.layout(), self.globalScores, 2, 'Hz')
+        self.updateRanking(self.scores.boxGlobalHighest.layout(), self.globalScores, 2, 'Hz', 
             reverse=True)
-        self.updateRanking(self.scores.boxGlobalHighest.layout(), self.globalScores, 1, 'Hz', 
+        self.updateRanking(self.scores.boxGlobalLoudest.layout(), self.globalScores, 1, 'dB', 
             reverse=True)
         
-        self.updateRanking(self.scores.boxLocalLowest.layout(), self.localScores, 1, 'Hz')
-        self.updateRanking(self.scores.boxLocalLoudest.layout(), self.localScores, 0, 'dBFS', 
+        self.updateRanking(self.scores.boxLocalLowest.layout(), self.localScores, 2, 'Hz')
+        self.updateRanking(self.scores.boxLocalHighest.layout(), self.localScores, 2, 'Hz', 
             reverse=True)
-        self.updateRanking(self.scores.boxLocalHighest.layout(), self.localScores, 1, 'Hz', 
+        self.updateRanking(self.scores.boxLocalLoudest.layout(), self.localScores, 1, 'dB', 
             reverse=True)
+
+
+        powerScores = [x[1] for x in self.globalScores.values()]
+        y, x = np.histogram(powerScores, bins=np.linspace(
+            np.min(powerScores), np.max(powerScores), self.scores.boxPowerBins.value()))
+        self.scores.powerHistogram.clear()
+        self.scores.powerHistogram.plot(x, y, stepMode=True, fillLevel=0, brush=(0,0,255,150))
+
+        frequencyScores = [x[2] for x in self.globalScores.values()]
+        y, x = np.histogram(frequencyScores, bins=np.linspace(
+                np.min(frequencyScores), np.max(frequencyScores), self.scores.boxFrequencyBins.value()))
+        self.scores.frequencyHistogram.clear()
+        self.scores.frequencyHistogram.plot(x, y, stepMode=True, fillLevel=0, brush=(0,0,255,150))
         
         
 
@@ -386,7 +433,7 @@ class KrijsEenPrijs(QObject):
 
 
     def start(self):
-        self.timer.start()
+        self.timer.start(self.CHUNK_SIZE / self.SAMPLE_RATE * 1000)
 
 
     def stop(self):
@@ -397,16 +444,20 @@ class KrijsEenPrijs(QObject):
         self.timer.stop()
         self.deque = deque()
 
-        name = self.plots.lineName.text()
+        firstName = self.plots.lineName.text()
+        firstName = firstName[0].upper() + firstName[1:]
+
+        lastName = self.plots.lineSurname.text().split(' ')
+        lastName[-1] = lastName[-1][0].upper() + lastName[-1][1:]
+        lastName = ' '.join(lastName)
+
+        name = '{} {}'.format(firstName, lastName)
+
+        self.globalScores[name] = [int(self.plots.lineAge.text()), self.maxPower, self.maxFrequency]
+        self.localScores[name] = [int(self.plots.lineAge.text()), self.maxPower, self.maxFrequency]
 
         # update highscores
-        self.globalScores[name] = [self.maxPower, self.maxFrequency]
-        with open('globalscores.yaml', 'w') as f:
-            yaml.dump(self.globalScores, f)
-
-        self.localScores[name] = [self.maxPower, self.maxFrequency]
-        with open('localscores.yaml', 'w') as f:
-            yaml.dump(self.localScores, f)
+        self.dumpScores()
 
         # update scores window
         self.updateScoresSignal.emit()
@@ -442,9 +493,22 @@ class KrijsEenPrijs(QObject):
         exporter.parameters()['width'] = 2000
         exporter.export('timeseries.png')
         
-        exporter =  ImageExporter(self.spectrogramImage)
+        exporter = ImageExporter(self.spectrogramImage)
         exporter.parameters()['width'] = 2000
         exporter.export('spectrogram.png')
+
+        run(['lp', '-d', self.plots.boxPrinter.currentText(), './spectrogram.png'])
+
+
+    def dumpScores(self):
+        
+        #os.remove('globalscores.yaml')
+        with open('globalscores.yaml', 'w') as f:
+            yaml.dump(self.globalScores, f)
+
+        #os.remove('localscores.yaml')
+        with open('localscores.yaml', 'w') as f:
+            yaml.dump(self.localScores, f)
 
 
     def reset(self):
