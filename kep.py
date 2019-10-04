@@ -69,7 +69,7 @@ class KrijsEenPrijs(QObject):
             / np.log(self.FFT_SIZE // 2 + 1) * self.FFT_SIZE // 2)
 
         try:
-            with open('./globalscores.yaml') as f:
+            with open('scores/globalscores.yaml') as f:
                 self.globalScores = yaml.load(f)
             if self.globalScores == None:
                 self.globalScores = {}
@@ -78,7 +78,7 @@ class KrijsEenPrijs(QObject):
             self.globalScores = {}
 
         try:
-            with open('./localscores.yaml') as f:
+            with open('scores/localscores.yaml') as f:
                 self.localScores = yaml.load(f)
             if self.localScores == None:
                 self.localScores = {}
@@ -115,14 +115,14 @@ class KrijsEenPrijs(QObject):
         pg.setConfigOptions(
             imageAxisOrder='row-major', background=pg.mkColor(0x0, 0x0, 0x100, 0x24))
 
-        self.plots = loadUi('plots.ui')
+        self.plots = loadUi('ui/plots.ui')
 
         self.font = QFont()
         self.font.setPixelSize(14)
         self.labelStyle = {'color': '#FFF', 'font-size': '16px'}
         self.titleStyle = {'color': '#FFF', 'font-size': '40px'}
 
-        self.plots.labelLogo.setPixmap(QPixmap('sron_small.png'))
+        self.plots.labelLogo.setPixmap(QPixmap('images/sron_small.png'))
 
         self.plots.timePlot.setTitle('Microphone Signal', **self.titleStyle)
         self.plots.timePlot.setLabel('left', 'amplitude', **self.labelStyle)
@@ -206,7 +206,7 @@ class KrijsEenPrijs(QObject):
 
     def initScoresGui(self):
 
-        self.scores = loadUi('scores.ui')
+        self.scores = loadUi('ui/scores.ui')
 
         self.scores.powerHistogram.setTitle('Power Score Distribution', **self.titleStyle)
         self.scores.powerHistogram.setLabel('left', '# of people', **self.labelStyle)
@@ -473,41 +473,42 @@ class KrijsEenPrijs(QObject):
         timePlot.resize(800,200)
         timeCurve = timePlot.plot(self.timeAxis, self.audioData[::self.DECIMATION], pen=pen)
 
-        # # create rotated version of spectrum
-        # spectrumPlot = pg.PlotWidget()
-        # spectrumPlot.setBackground(None)
-        # spectrumPlot.getPlotItem().setLogMode(True, False)
-        # spectrumPlot.getPlotItem().setRange(yRange=[self.SPECTRUM_MIN, self.SPECTRUM_MAX])
-        # spectrumPlot.getAxis('left').setTicks(
-        #     [[(x, str(x)) for x in range(self.SPECTRUM_MIN, self.SPECTRUM_MAX, 20)]])
-        # spectrumPlot.getAxis('bottom').setTicks([[(x, str(int(10**x))) for x in [1, 2, 3, 4, 5]]])
-        # spectrumCurve = spectrumPlot.plot(self.spectrumScale, self.maxSpectrum)
+        # create rotated version of spectrum
+        spectrumPlot = pg.PlotWidget()
+        spectrumPlot.setBackground(None)
+        spectrumPlot.getPlotItem().setLogMode(True, False)
+        spectrumPlot.getPlotItem().setRange(yRange=[self.SPECTRUM_MIN, self.SPECTRUM_MAX])
+        spectrumPlot.getAxis('left').setTicks(
+            [[(x, str(x)) for x in range(self.SPECTRUM_MIN, self.SPECTRUM_MAX, 20)]])
+        spectrumPlot.getAxis('bottom').setTicks([[(x, str(int(10**x))) for x in [1, 2, 3, 4, 5]]])
+        spectrumCurve = spectrumPlot.plot(self.spectrumScale, self.maxSpectrum)
 
-        # # export plots to png
-        # exporter = ImageExporter(spectrumPlot.plotItem)
-        # exporter.parameters()['width'] = 2000
-        # exporter.export('spectrum.png')
+        export plots to png
+        exporter = ImageExporter(spectrumPlot.plotItem)
+        exporter.parameters()['width'] = 2000
+        exporter.export('images/spectrum.png')
 
         exporter = ImageExporter(timePlot.plotItem)
         exporter.parameters()['width'] = 2000
         exporter.parameters()['width'] = 2000
-        exporter.export('timeseries.png')
+        exporter.export('images/timeseries.png')
         
         exporter = ImageExporter(self.spectrogramImage)
         exporter.parameters()['width'] = 2000
-        exporter.export('spectrogram.png')
+        exporter.export('images/spectrogram.png')
 
+        time.sleep(0.5)
         run(['lp', '-d', self.plots.boxPrinter.currentText(), './spectrogram.png'])
 
 
     def dumpScores(self):
         
         #os.remove('globalscores.yaml')
-        with open('globalscores.yaml', 'w') as f:
+        with open('scores/globalscores.yaml', 'w') as f:
             yaml.dump(self.globalScores, f)
 
         #os.remove('localscores.yaml')
-        with open('localscores.yaml', 'w') as f:
+        with open('scores/localscores.yaml', 'w') as f:
             yaml.dump(self.localScores, f)
 
 
