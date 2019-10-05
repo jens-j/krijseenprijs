@@ -181,20 +181,20 @@ class KrijsEenPrijs(QObject):
         ageValidator = QIntValidator(0, 1000)
         self.plots.lineAge.setValidator(ageValidator)
 
-        # populate printer dropdown menu 
-        outp = check_output(['lpstat', '-p', '-d'])
-        print(outp)
-        print(outp.split(b'\n'))
-        for line in outp.split(b'\n'):
-            print(line)
-            words = line.split(b' ')
-            if words[0] == b'printer':
-                printername = words[1].strip().decode('utf-8')
-                self.plots.boxPrinter.addItem(printername)
+        # # populate printer dropdown menu 
+        # outp = check_output(['lpstat', '-p', '-d'])
+        # print(outp)
+        # print(outp.split(b'\n'))
+        # for line in outp.split(b'\n'):
+        #     print(line)
+        #     words = line.split(b' ')
+        #     if words[0] == b'printer':
+        #         printername = words[1].strip().decode('utf-8')
+        #         self.plots.boxPrinter.addItem(printername)
 
-        index = self.plots.boxPrinter.findText(self.DEFAULT_PRINTER)
-        if index:
-            self.plots.boxPrinter.setCurrentIndex(index)
+        # index = self.plots.boxPrinter.findText(self.DEFAULT_PRINTER)
+        # if index:
+        #     self.plots.boxPrinter.setCurrentIndex(index)
 
         self.plots.startButton.clicked.connect(self.start)
         self.plots.stopButton.clicked.connect(self.stop)
@@ -211,14 +211,14 @@ class KrijsEenPrijs(QObject):
         self.scores = loadUi('ui/scores.ui')
 
         self.scores.powerHistogram.setTitle('Power Score Distribution', **self.titleStyle)
-        self.scores.powerHistogram.setLabel('left', '# of people', **self.labelStyle)
+        self.scores.powerHistogram.setLabel('left', '# of subjects', **self.labelStyle)
         self.scores.powerHistogram.setLabel('bottom', 'Power (dB)', **self.labelStyle)
         self.scores.powerHistogram.getAxis('left').tickFont = self.font
         self.scores.powerHistogram.getAxis('bottom').tickFont = self.font
         self.scores.powerHistogram.setMouseEnabled(x=False, y=False)
 
         self.scores.frequencyHistogram.setTitle('Main Frequency Distribution', **self.titleStyle)
-        self.scores.frequencyHistogram.setLabel('left', '# of people', **self.labelStyle)
+        self.scores.frequencyHistogram.setLabel('left', '# of subjects', **self.labelStyle)
         self.scores.frequencyHistogram.setLabel('bottom', 'frequency (Hz)', **self.labelStyle)
         self.scores.frequencyHistogram.getAxis('left').tickFont = self.font
         self.scores.frequencyHistogram.getAxis('bottom').tickFont = self.font
@@ -368,9 +368,6 @@ class KrijsEenPrijs(QObject):
 
     def updateScores(self):
 
-        print('updatescores')
-        print(self.localScores)
-
         self.updateRanking(self.scores.boxGlobalLowest.layout(), self.globalScores, 2, 'Hz')
         self.updateRanking(self.scores.boxGlobalHighest.layout(), self.globalScores, 2, 'Hz', 
             reverse=True)
@@ -386,13 +383,15 @@ class KrijsEenPrijs(QObject):
 
         powerScores = [x[1] for x in self.globalScores.values()]
         y, x = np.histogram(powerScores, bins=np.linspace(
-            np.min(powerScores), np.max(powerScores), self.scores.boxPowerBins.value()))
+            np.min(powerScores), np.max(powerScores), self.scores.boxPowerBins.value() + 1))
         self.scores.powerHistogram.clear()
         self.scores.powerHistogram.plot(x, y, stepMode=True, fillLevel=0, brush=(0,0,255,150))
 
         frequencyScores = [x[2] for x in self.globalScores.values()]
         y, x = np.histogram(frequencyScores, bins=np.linspace(
-                np.min(frequencyScores), np.max(frequencyScores), self.scores.boxFrequencyBins.value()))
+                np.min(frequencyScores), 
+                np.max(frequencyScores), 
+                self.scores.boxFrequencyBins.value() + 1))
         self.scores.frequencyHistogram.clear()
         self.scores.frequencyHistogram.plot(x, y, stepMode=True, fillLevel=0, brush=(0,0,255,150))
         
@@ -476,32 +475,32 @@ class KrijsEenPrijs(QObject):
         timeCurve = timePlot.plot(self.timeAxis, self.audioData[::self.DECIMATION], pen=pen)
 
         # create rotated version of spectrum
-        labelStyle = {'color': '#000', 'font-size': '16px'}
-        spectrumPlot = pg.PlotWidget()
-        # spectrumPlot.setTitle(title='Power Spectral Density', **labelStyle)
-        # spectrumPlot.setLabel('bottom', 'frequency (Hz)', **labelStyle)
-        # spectrumPlot.setLabel('left', 'power spectral density (dB)', **labelStyle)
-        spectrumPlot.getAxis("left").setWidth(200)
-        spectrumPlot.getAxis('left').setPen(pen)
-        spectrumPlot.getAxis('bottom').setPen(pen)
-        #spectrumPlot.setBackground(None)
-        spectrumPlot.getPlotItem().setLogMode(True, False)
-        spectrumPlot.getPlotItem().setRange(
-            xRange=[1, np.log10(self.SAMPLE_RATE // 2)],
-            yRange=[0, self.SPECTRUM_MAX])
+        # labelStyle = {'color': '#000', 'font-size': '16px'}
+        # spectrumPlot = pg.PlotWidget()
+        # # spectrumPlot.setTitle(title='Power Spectral Density', **labelStyle)
+        # # spectrumPlot.setLabel('bottom', 'frequency (Hz)', **labelStyle)
+        # # spectrumPlot.setLabel('left', 'power spectral density (dB)', **labelStyle)
+        # spectrumPlot.getAxis("left").setWidth(200)
+        # spectrumPlot.getAxis('left').setPen(pen)
+        # spectrumPlot.getAxis('bottom').setPen(pen)
+        # #spectrumPlot.setBackground(None)
+        # spectrumPlot.getPlotItem().setLogMode(True, False)
+        # spectrumPlot.getPlotItem().setRange(
+        #     xRange=[1, np.log10(self.SAMPLE_RATE // 2)],
+        #     yRange=[0, self.SPECTRUM_MAX])
 
-        spectrumPlot.getAxis('left').setTicks(
-            [[(x, str(x)) for x in range(self.SPECTRUM_MIN, self.SPECTRUM_MAX, 20)]])
+        # spectrumPlot.getAxis('left').setTicks(
+        #     [[(x, str(x)) for x in range(self.SPECTRUM_MIN, self.SPECTRUM_MAX, 20)]])
 
-        spectrumPlot.getAxis('bottom').setTicks(
-            [[(x, str(int(10**x))) for x in [1, 2, 3, 4, 5]]])
+        # spectrumPlot.getAxis('bottom').setTicks(
+        #     [[(x, str(int(10**x))) for x in [1, 2, 3, 4, 5]]])
 
-        spectrumCurve = spectrumPlot.plot(self.spectrumScale, self.maxSpectrum, pen=pen)
+        # spectrumCurve = spectrumPlot.plot(self.spectrumScale, self.maxSpectrum, pen=pen)
 
         # export plots to png
-        exporter = ImageExporter(spectrumPlot.plotItem)
-        exporter.parameters()['width'] = 2000
-        exporter.export('images/spectrum.png')
+        # exporter = ImageExporter(spectrumPlot.plotItem)
+        # exporter.parameters()['width'] = 2000
+        # exporter.export('images/spectrum.png')
 
         exporter = ImageExporter(timePlot.plotItem)
         exporter.parameters()['width'] = 2000
@@ -514,7 +513,7 @@ class KrijsEenPrijs(QObject):
         diplomaPath = createDiploma(firstName, lastName, self.maxPower, self.maxFrequency)
 
         time.sleep(0.5)
-        run(['lp', '-d', self.plots.boxPrinter.currentText(), diplomaPath])
+        #run(['lp', '-d', self.plots.boxPrinter.currentText(), diplomaPath])
 
 
     def dumpScores(self):

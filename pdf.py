@@ -45,15 +45,13 @@ def createDiploma(name, surname, power, frequency):
 
     drawText(c, 'Krijsprofiel:', 'Times-Italic', 16, 2.5*cm, 16.8*cm)
     drawText(c, 'Krijs spectrogram:', 'Times-Italic', 16, 2.5*cm, 13.2*cm)
-    drawText(c, '(0 - 24 kHz, logarithmisch)', 'Times-Italic', 16, 12.5*cm, 4.5*cm)
+    #drawText(c, '(10 Hz - 24 kHz, logarithmisch)', 'Times-Italic', 16, 11.5*cm, 4.5*cm)
 
     c.drawImage('images/timeseries.png', 0.6*cm, 13*cm, 18.8*cm, 4*cm, mask='auto')
     c.drawImage('images/spectrogram.png', 2.3*cm, 5*cm, 16.5*cm, 8*cm)
 
-    #c.drawImage('images/spectrum.png', 11.5*cm, 1.6*cm, 8*cm, 4*cm)
-
-    c.drawImage('images/sron.png', 1.8*cm, 1.25*cm, 6.5*cm, 1.5*cm, mask='auto')
-    #c.drawImage('images/sron.png', 12.5*cm, 3.3*cm, 6.5*cm, 1.5*cm, mask='auto')
+    c.drawImage('images/logo_logo.png', 15*cm, 2.2*cm, 4*cm, 1.4*cm, mask='auto')
+    c.drawImage('images/logo_text.png', 12.4*cm, 1.6*cm, 6.8*cm, 0.35*cm, mask='auto')
 
     c.showPage()
     c.save()
