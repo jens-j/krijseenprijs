@@ -35,7 +35,7 @@ def createDiploma(name, surname, power, frequency):
     path = 'diplomas/diploma_{}_{}.pdf'.format(name, surname)
     c = canvas.Canvas(path)
 
-    c.drawImage('images/border2.jpg', 0, 0, 21*cm, 29.7*cm)
+    c.drawImage('images/border.png', 0, 0, 21*cm, 29.7*cm)
 
     centerText(c, 'Krijsdiploma', 'Times-BoldItalic', 60, 23*cm)
     centerText(c, '{} {}'.format(name, surname), 'Times-BoldItalic', 32, 21.3*cm)
