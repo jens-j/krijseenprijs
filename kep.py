@@ -22,6 +22,8 @@ from PyQt5.QtCore import pyqtSignal, QTimer, QObject, Qt
 from PyQt5.QtGui import QFont, QSizePolicy, QFont, QPixmap, QIntValidator
 from PyQt5.uic import loadUi
 
+from pdf import createDiploma
+
 # TODO:
 # - plot ticks
 # - grid
@@ -33,7 +35,7 @@ from PyQt5.uic import loadUi
 
 class KrijsEenPrijs(QObject):
 
-    TIME_AXIS_LENGTH        = 10   # s
+    TIME_AXIS_LENGTH        = 8    # s
     SAMPLE_RATE             = 48000 # Hz
     DECIMATION              = 32    # sample decimation factor for time plot
     CHUNK_SIZE              = 2**11 # determines max plot framerate -> ~23.4 Hz
@@ -135,7 +137,7 @@ class KrijsEenPrijs(QObject):
         self.plots.spectrumPlot.setTitle(title='Power Spectral Density', **self.titleStyle)
         self.plots.spectrumPlot.setLabel('left', 'frequency (Hz)', **self.labelStyle)
         self.plots.spectrumPlot.setLabel(
-            'bottom', 'power spectral density (dB', **self.labelStyle)
+            'bottom', 'power spectral density (dB)', **self.labelStyle)
         self.plots.spectrumPlot.getAxis('left').tickFont = self.font
         self.plots.spectrumPlot.getAxis('bottom').tickFont = self.font
         self.plots.spectrumPlot.getPlotItem().setLogMode(False, True)
@@ -462,7 +464,7 @@ class KrijsEenPrijs(QObject):
         # update scores window
         self.updateScoresSignal.emit()
 
-        pen = pg.mkPen(color=(0, 0, 0), width=3)
+        pen = pg.mkPen(color=(0, 0, 0), width=2)
         pg.setConfigOption('background', 'w')
 
         timePlot = pg.PlotWidget()
@@ -474,22 +476,34 @@ class KrijsEenPrijs(QObject):
         timeCurve = timePlot.plot(self.timeAxis, self.audioData[::self.DECIMATION], pen=pen)
 
         # create rotated version of spectrum
+        labelStyle = {'color': '#000', 'font-size': '16px'}
         spectrumPlot = pg.PlotWidget()
-        spectrumPlot.setBackground(None)
+        # spectrumPlot.setTitle(title='Power Spectral Density', **labelStyle)
+        # spectrumPlot.setLabel('bottom', 'frequency (Hz)', **labelStyle)
+        # spectrumPlot.setLabel('left', 'power spectral density (dB)', **labelStyle)
+        spectrumPlot.getAxis("left").setWidth(200)
+        spectrumPlot.getAxis('left').setPen(pen)
+        spectrumPlot.getAxis('bottom').setPen(pen)
+        #spectrumPlot.setBackground(None)
         spectrumPlot.getPlotItem().setLogMode(True, False)
-        spectrumPlot.getPlotItem().setRange(yRange=[self.SPECTRUM_MIN, self.SPECTRUM_MAX])
+        spectrumPlot.getPlotItem().setRange(
+            xRange=[1, np.log10(self.SAMPLE_RATE // 2)],
+            yRange=[0, self.SPECTRUM_MAX])
+
         spectrumPlot.getAxis('left').setTicks(
             [[(x, str(x)) for x in range(self.SPECTRUM_MIN, self.SPECTRUM_MAX, 20)]])
-        spectrumPlot.getAxis('bottom').setTicks([[(x, str(int(10**x))) for x in [1, 2, 3, 4, 5]]])
-        spectrumCurve = spectrumPlot.plot(self.spectrumScale, self.maxSpectrum)
 
-        export plots to png
+        spectrumPlot.getAxis('bottom').setTicks(
+            [[(x, str(int(10**x))) for x in [1, 2, 3, 4, 5]]])
+
+        spectrumCurve = spectrumPlot.plot(self.spectrumScale, self.maxSpectrum, pen=pen)
+
+        # export plots to png
         exporter = ImageExporter(spectrumPlot.plotItem)
         exporter.parameters()['width'] = 2000
         exporter.export('images/spectrum.png')
 
         exporter = ImageExporter(timePlot.plotItem)
-        exporter.parameters()['width'] = 2000
         exporter.parameters()['width'] = 2000
         exporter.export('images/timeseries.png')
         
@@ -497,8 +511,10 @@ class KrijsEenPrijs(QObject):
         exporter.parameters()['width'] = 2000
         exporter.export('images/spectrogram.png')
 
+        diplomaPath = createDiploma(firstName, lastName, self.maxPower, self.maxFrequency)
+
         time.sleep(0.5)
-        run(['lp', '-d', self.plots.boxPrinter.currentText(), './spectrogram.png'])
+        run(['lp', '-d', self.plots.boxPrinter.currentText(), diplomaPath])
 
 
     def dumpScores(self):
