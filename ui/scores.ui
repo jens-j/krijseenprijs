@@ -38,9 +38,9 @@
         <widget class="QGroupBox" name="boxGlobalLoudest">
          <property name="font">
           <font>
-           <pointsize>14</pointsize>
-           <weight>50</weight>
-           <bold>false</bold>
+           <pointsize>12</pointsize>
+           <weight>75</weight>
+           <bold>true</bold>
           </font>
          </property>
          <property name="title">
@@ -67,9 +67,9 @@
         <widget class="QGroupBox" name="boxGlobalHighest">
          <property name="font">
           <font>
-           <pointsize>14</pointsize>
-           <weight>50</weight>
-           <bold>false</bold>
+           <pointsize>12</pointsize>
+           <weight>75</weight>
+           <bold>true</bold>
           </font>
          </property>
          <property name="title">
@@ -96,9 +96,9 @@
         <widget class="QGroupBox" name="boxGlobalLowest">
          <property name="font">
           <font>
-           <pointsize>14</pointsize>
-           <weight>50</weight>
-           <bold>false</bold>
+           <pointsize>12</pointsize>
+           <weight>75</weight>
+           <bold>true</bold>
           </font>
          </property>
          <property name="title">
@@ -147,9 +147,9 @@
         <widget class="QGroupBox" name="boxLocalLoudest">
          <property name="font">
           <font>
-           <pointsize>14</pointsize>
-           <weight>50</weight>
-           <bold>false</bold>
+           <pointsize>12</pointsize>
+           <weight>75</weight>
+           <bold>true</bold>
           </font>
          </property>
          <property name="title">
@@ -176,9 +176,9 @@
         <widget class="QGroupBox" name="boxLocalHighest">
          <property name="font">
           <font>
-           <pointsize>14</pointsize>
-           <weight>50</weight>
-           <bold>false</bold>
+           <pointsize>12</pointsize>
+           <weight>75</weight>
+           <bold>true</bold>
           </font>
          </property>
          <property name="title">
@@ -205,9 +205,9 @@
         <widget class="QGroupBox" name="boxLocalLowest">
          <property name="font">
           <font>
-           <pointsize>14</pointsize>
-           <weight>50</weight>
-           <bold>false</bold>
+           <pointsize>12</pointsize>
+           <weight>75</weight>
+           <bold>true</bold>
           </font>
          </property>
          <property name="title">
@@ -297,7 +297,6 @@
            <verstretch>1</verstretch>
           </sizepolicy>
          </property>
-         <zorder>groupBox_4</zorder>
         </widget>
        </item>
        <item>
@@ -348,7 +347,7 @@
      <x>0</x>
      <y>0</y>
      <width>1049</width>
-     <height>30</height>
+     <height>22</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuNew_Round">

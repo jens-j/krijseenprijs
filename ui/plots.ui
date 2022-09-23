@@ -297,7 +297,7 @@
                      </font>
                     </property>
                     <property name="text">
-                     <string>Power</string>
+                     <string>Total power</string>
                     </property>
                    </widget>
                   </item>
@@ -333,7 +333,7 @@
                      </font>
                     </property>
                     <property name="text">
-                     <string>Frequency</string>
+                     <string>Main frequency</string>
                     </property>
                    </widget>
                   </item>
@@ -348,6 +348,39 @@
                     </property>
                     <property name="text">
                      <string>0 Hz</string>
+                    </property>
+                    <property name="alignment">
+                     <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+                    </property>
+                   </widget>
+                  </item>
+                 </layout>
+                </item>
+                <item>
+                 <layout class="QHBoxLayout" name="horizontalLayout_10">
+                  <item>
+                   <widget class="QLabel" name="label_6">
+                    <property name="font">
+                     <font>
+                      <pointsize>12</pointsize>
+                     </font>
+                    </property>
+                    <property name="text">
+                     <string>Closest note</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QLabel" name="lblNote">
+                    <property name="font">
+                     <font>
+                      <pointsize>12</pointsize>
+                      <weight>75</weight>
+                      <bold>true</bold>
+                     </font>
+                    </property>
+                    <property name="text">
+                     <string>A4</string>
                     </property>
                     <property name="alignment">
                      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
@@ -426,7 +459,7 @@
      <x>0</x>
      <y>0</y>
      <width>1068</width>
-     <height>30</height>
+     <height>22</height>
     </rect>
    </property>
   </widget>
