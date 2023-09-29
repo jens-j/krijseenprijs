@@ -1,0 +1,15 @@
+/*
+Egress dark-theme style sheet.
+
+This style sheet changes as little as possible to the Qt default values. These default values may
+be ugly but they are very readable. If you adds style element to this sheet it is probably best to
+adhere to this philosophy (or make a different qss file).
+
+*/
+
+
+#page {
+    background-color: #808080;
+    alternate-background-color: #686868;
+}
+

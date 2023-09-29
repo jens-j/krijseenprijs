@@ -1,0 +1,39 @@
+/*
+Egress light-theme style sheet.
+
+This style sheet changes as little as possible to the Qt default values. These default values may
+be ugly but they are very readable. If you adds style element to this sheet it is probably best to
+adhere to this philosophy (or make a different qss file).
+
+*/
+
+
+#page {
+    background-color: #999999;
+    alternate-background-color: #888888;
+}
+
+/* Uncomment the following statements to override the default settings (remove spaces between * and / ) */
+
+/*
+#panel {
+    background-color: palette(window);
+    border: 1px solid palette(windowtext);     /* If the border is 0 it is hard to resize the panels * /
+}
+
+#panel-title-bar {
+    color: white;
+    background-color: palette(link);
+}
+
+#panel-title-bar QToolButton {
+    border: none;                /* Needed, otherwise the shading will show * /
+}
+
+#panel-title-bar-label {
+    background-color: palette(link);
+    font-weight: bold;
+}
+
+*/
+
