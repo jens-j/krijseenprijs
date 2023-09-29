@@ -144,14 +144,14 @@ class KrijsEenPrijs(QMainWindow):
         pg.setConfigOptions(
             imageAxisOrder='row-major', background=pg.mkColor(0x0, 0x0, 0x100, 0x24))
 
-        self.plots = loadUi(f'{self.uipath}/plots_widget_2.ui')
+        self.plots = loadUi(f'{self.uipath}/plots_widget.ui')
 
         self.font = QFont()
         self.font.setPixelSize(14)
         self.labelStyle = {'color': '#FFF', 'font-size': '16px'}
         self.titleStyle = {'color': '#FFF', 'font-size': '40px'}
 
-        self.plots.labelLogo.setPixmap(QPixmap('images/sron_small.png'))
+        self.plots.labelLogo.setPixmap(QPixmap('images/sron_small_bg.png'))
 
         self.plots.timePlot.setTitle('Microphone Signal', **self.titleStyle)
         self.plots.timePlot.setLabel('left', 'amplitude', **self.labelStyle)
@@ -234,7 +234,7 @@ class KrijsEenPrijs(QMainWindow):
         self.plots.keypress_widget.spaceBarClicked.connect(self.handleSpaceBarClicked)
 
         self.plots.setWindowTitle('Plots')
-        self.plots.resize(1920, 1080)
+        self.plots.resize(1920, 1200)
 
         self.plots.show()
 
@@ -302,8 +302,8 @@ class KrijsEenPrijs(QMainWindow):
                 newData = np.concatenate((newData, self.deque.popleft()))
 
 
-        self.audioData = np.roll(self.audioData, -len(newData))
-        self.audioData[-len(newData):] = newData
+        self.audioData = np.roll(self.audioData, len(newData))
+        self.audioData[:len(newData)] = newData
 
         # process n spectra for every GUI update
         for i in range(n):
@@ -311,7 +311,7 @@ class KrijsEenPrijs(QMainWindow):
             x = self.FFT_SIZE + (n - 1 - i) * self.FFT_RATE
             y = (n - 1 - i) * self.FFT_RATE
 
-            fftData = self.audioData[-x:] if y == 0 else self.audioData[-x:-y]
+            fftData = self.audioData[:x] if y == 0 else self.audioData[y:x]
 
             self.spectrum = self.getSpectrum(fftData)
             self.maxSpectrum = np.maximum(self.maxSpectrum, self.spectrum)
@@ -323,8 +323,8 @@ class KrijsEenPrijs(QMainWindow):
             logRange = 10**(np.log10(SIZE) / SIZE * linRange) # (magic)
             f = interp1d(linRange, self.spectrum, kind='cubic')
 
-            self.spectrogram = self.spectrogram[:,1:]
-            self.spectrogram = np.column_stack([self.spectrogram, f(logRange)])
+            self.spectrogram = self.spectrogram[:,:-1]
+            self.spectrogram = np.column_stack([f(logRange), self.spectrogram])
 
         # create higher precision spectrum for score
         self.longSpectrum = self.getSpectrum(self.audioData[-self.LONG_FFT_SIZE:])
