@@ -7,7 +7,7 @@ import pprint
 import pyaudio
 import yaml
 import time
-from subprocess import Popen, run, check_output
+from subprocess import Popen, run, check_output, CalledProcessError
 from datetime import datetime
 from collections import deque
 
@@ -28,9 +28,30 @@ from pdf import createDiploma
 # TODO:
 # - better dB scaling
 # - throw away highest bins?
-# - start / stop using spacebar -> too difficult
+# - start / stop using spacebar -> wont work
 
-class KrijsEenPrijs(QApplication):
+
+class MyQWidget(QWidget):
+
+    spaceBarClicked = pyqtSignal()
+
+    def __init__(self, parent=None):
+        QWidget.__init__(self)
+
+
+    # Toggle start/stop with the spacebar.
+    def keyPressEvent(self, event):
+
+        print('keyPressEvent')
+        if event.key() == Qt.Key_Space:
+            event.accept()
+            self.spaceBarClicked.emit()
+        else:
+            event.ignore()
+
+
+
+class KrijsEenPrijs(QMainWindow):
 
     TIME_AXIS_LENGTH        = 8    # s
     SAMPLE_RATE             = 48000 # Hz
@@ -54,12 +75,12 @@ class KrijsEenPrijs(QApplication):
     updateScoresSignal = pyqtSignal()
 
 
-    def __init__(self, argv):
+    def __init__(self, parent=None):
 
-        super(KrijsEenPrijs, self).__init__(argv)
+        QMainWindow.__init__(self, parent)
 
-        self.pp = pprint.PrettyPrinter()
         self.uipath = os.path.dirname(os.path.abspath(__file__)) + '/ui/'
+        self.pp = pprint.PrettyPrinter()
         self.deque = deque()
         self.running = True
         self.t0 = datetime.now()
@@ -90,10 +111,6 @@ class KrijsEenPrijs(QApplication):
             print('could not load local highscores')
             self.localScores = {}
 
-        # Set QSS style
-        with open(self.uipath + 'dark-colorfull.qss') as f:
-            styleSheet = f.read();
-            self.setStyleSheet(styleSheet)
 
         self.initPlotData()
         self.initPlotsGui()
@@ -127,7 +144,7 @@ class KrijsEenPrijs(QApplication):
         pg.setConfigOptions(
             imageAxisOrder='row-major', background=pg.mkColor(0x0, 0x0, 0x100, 0x24))
 
-        self.plots = loadUi(f'{self.uipath}/plots.ui')
+        self.plots = loadUi(f'{self.uipath}/plots_widget_2.ui')
 
         self.font = QFont()
         self.font.setPixelSize(14)
@@ -193,27 +210,31 @@ class KrijsEenPrijs(QApplication):
         self.plots.lineAge.setValidator(ageValidator)
 
         # populate printer dropdown menu
-        outp = check_output(['lpstat', '-p', '-d'])
-        print(outp)
-        print(outp.split(b'\n'))
-        for line in outp.split(b'\n'):
-            print(line)
-            words = line.split(b' ')
-            if words[0] == b'printer':
-                printername = words[1].strip().decode('utf-8')
-                self.plots.boxPrinter.addItem(printername)
+        try:
+            outp = check_output(['lpstat', '-p', '-d'])
+            print(outp)
+            print(outp.split(b'\n'))
+            for line in outp.split(b'\n'):
+                print(line)
+                words = line.split(b' ')
+                if words[0] == b'printer':
+                    printername = words[1].strip().decode('utf-8')
+                    self.plots.boxPrinter.addItem(printername)
 
-        index = self.plots.boxPrinter.findText(self.DEFAULT_PRINTER)
-        if index:
-            self.plots.boxPrinter.setCurrentIndex(index)
+            index = self.plots.boxPrinter.findText(self.DEFAULT_PRINTER)
+            if index:
+                self.plots.boxPrinter.setCurrentIndex(index)
+        except CalledProcessError as e:
+            print(f'lpstat error: {e}')
 
         self.plots.startButton.clicked.connect(self.start)
         self.plots.stopButton.clicked.connect(self.stop)
         self.plots.saveButton.clicked.connect(self.save)
         self.plots.resetButton.clicked.connect(self.reset)
+        self.plots.keypress_widget.spaceBarClicked.connect(self.handleSpaceBarClicked)
 
         self.plots.setWindowTitle('Plots')
-        self.plots.resize(1920, 1200)
+        self.plots.resize(1920, 1080)
 
         self.plots.show()
 
@@ -450,6 +471,14 @@ class KrijsEenPrijs(QApplication):
                        stream_callback=self.streamCallback)
 
 
+    def handleSpaceBarClicked(self):
+
+            if self.timer.isActive():
+                self.stop()
+            else:
+                self.start()
+
+
     def start(self):
         self.timer.start(self.CHUNK_SIZE // self.SAMPLE_RATE * 1000)
 
@@ -565,9 +594,18 @@ class KrijsEenPrijs(QApplication):
 
 
 def main():
-    # qApp = QApplication(sys.argv)
-    kep = KrijsEenPrijs(sys.argv)
-    sys.exit(kep.exec_())
+    qApp = QApplication(sys.argv)
+    kep = KrijsEenPrijs()
+
+    uipath = os.path.dirname(os.path.abspath(__file__)) + '/ui/'
+
+    # Set QSS style
+    with open(uipath + 'dark-colorfull.qss') as f:
+        styleSheet = f.read();
+        qApp.setStyleSheet(styleSheet)
+
+    # kep.show() # The mainwindow is empty so it should be invisible.
+    sys.exit(qApp.exec_())
 
 
 if __name__ == '__main__':

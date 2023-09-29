@@ -13,7 +13,7 @@
   <property name="windowTitle">
    <string>MainWindow</string>
   </property>
-  <widget class="QWidget" name="centralwidget">
+  <widget class="MyQWidget" name="centralwidget">
    <layout class="QHBoxLayout" name="horizontalLayout">
     <item>
      <widget class="QWidget" name="verticalWidget" native="true">
@@ -109,7 +109,7 @@
                 </font>
                </property>
                <property name="title">
-                <string>Subject</string>
+                <string/>
                </property>
                <layout class="QVBoxLayout" name="verticalLayout_6">
                 <item>
@@ -284,7 +284,7 @@
                 </font>
                </property>
                <property name="title">
-                <string>Score</string>
+                <string/>
                </property>
                <layout class="QVBoxLayout" name="verticalLayout_5">
                 <item>
@@ -459,7 +459,7 @@
      <x>0</x>
      <y>0</y>
      <width>1068</width>
-     <height>22</height>
+     <height>30</height>
     </rect>
    </property>
   </widget>
@@ -470,6 +470,12 @@
    <class>PlotWidget</class>
    <extends>QWidget</extends>
    <header>pyqtgraph.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>MyQWidget</class>
+   <extends>QWidget</extends>
+   <header>kep</header>
    <container>1</container>
   </customwidget>
  </customwidgets>
