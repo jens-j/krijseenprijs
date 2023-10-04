@@ -67,6 +67,8 @@ class KrijsEenPrijs(QMainWindow):
     SPECTRUM_MAX            = 100
     TIME_AXIS_SAMPLES       = SAMPLE_RATE * TIME_AXIS_LENGTH
     UPDATE_FREQ             = SAMPLE_RATE // CHUNK_SIZE
+    SPECTROGRAM_WIDTH       = TIME_AXIS_SAMPLES // FFT_RATE
+    SPECTROGRAM_HEIGHT      = FFT_SIZE // 2
     CALIBRATION             = 120
     DEFAULT_PRINTER         = 'PL04'
     NOTES                   = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
@@ -88,10 +90,19 @@ class KrijsEenPrijs(QMainWindow):
         self.totalPower = 0
         self.note = '--'
         self.spectrumScale = np.linspace(0, self.SAMPLE_RATE // 2, self.FFT_SIZE // 2)
+
         self.timeAxis = np.linspace(
             -self.TIME_AXIS_LENGTH, 0, self.TIME_AXIS_SAMPLES // self.DECIMATION)
+
         self.logScaleSpectrogram = (np.log(range(1, self.FFT_SIZE // 2 + 1))
             / np.log(self.FFT_SIZE // 2 + 1) * self.FFT_SIZE // 2)
+
+        self.spectrogramLinRange = np.array(np.arange(self.FFT_SIZE // 2))
+        self.spectrogramLogRange = 10**(np.log10(self.FFT_SIZE // 2) / (self.FFT_SIZE // 2) * self.spectrogramLinRange) # (magic)
+
+        print(self.spectrogramLinRange)
+        print(self.spectrogramLogRange)
+        print(len(self.spectrogramLogRange))
 
         try:
             with open('scores/globalscores.yaml') as f:
@@ -134,9 +145,8 @@ class KrijsEenPrijs(QMainWindow):
         self.audioData   = np.zeros(self.TIME_AXIS_SAMPLES, dtype=np.int16)
         self.spectrum    = np.ones(self.FFT_SIZE // 2, dtype=np.int16) * self.SPECTRUM_MIN_COLORMAP
         self.maxSpectrum = np.ones(self.FFT_SIZE // 2, dtype=np.int16) * self.SPECTRUM_MIN_COLORMAP
-        self.spectrogram = np.ones((self.FFT_SIZE // 2,
-                            self.TIME_AXIS_SAMPLES // self.FFT_RATE),
-                            dtype=np.float32) * self.SPECTRUM_MIN_COLORMAP
+        self.spectrogram = np.ones((self.SPECTROGRAM_HEIGHT, self.SPECTROGRAM_WIDTH), dtype=np.float32) \
+            * self.SPECTRUM_MIN_COLORMAP
 
 
     def initPlotsGui(self):
@@ -144,7 +154,7 @@ class KrijsEenPrijs(QMainWindow):
         pg.setConfigOptions(
             imageAxisOrder='row-major', background=pg.mkColor(0x0, 0x0, 0x100, 0x24))
 
-        self.plots = loadUi(f'{self.uipath}/plots_widget.ui')
+        self.plots = loadUi(f'{self.uipath}/plots_widget_grid.ui')
 
         self.font = QFont()
         self.font.setPixelSize(14)
@@ -186,14 +196,30 @@ class KrijsEenPrijs(QMainWindow):
         self.spectrogramImage = pg.ImageItem()
         self.spectrogramImage.setLevels([self.SPECTRUM_MIN_COLORMAP, self.SPECTRUM_MAX])
         self.plots.spectrogramPlot.setTitle('Spectrogram', **self.titleStyle)
-        # self.plots.spectrogramPlot.setLabel('left', 'FFT bin', **self.labelStyle)
-        # self.plots.spectrogramPlot.setLabel('bottom', 'time (s)', **self.labelStyle)
-        self.plots.spectrogramPlot.setLabel('left', ' ', **self.labelStyle)
-        self.plots.spectrogramPlot.setLabel('bottom', ' ', **self.labelStyle)
+        self.plots.spectrogramPlot.setLabel('left', 'FFT bin', **self.labelStyle)
+        self.plots.spectrogramPlot.setLabel('bottom', 'time (s)', **self.labelStyle)
+        # self.plots.spectrogramPlot.setLabel('left', ' ', **self.labelStyle)
+        # self.plots.spectrogramPlot.setLabel('bottom', ' ', **self.labelStyle)
         self.plots.spectrogramPlot.getAxis('left').tickFont = self.font
         self.plots.spectrogramPlot.getAxis('bottom').tickFont = self.font
         self.plots.spectrogramPlot.setMouseEnabled(x=False, y=False)
         self.plots.spectrogramPlot.addItem(self.spectrogramImage)
+
+        # Convert pixel indices to seconds for spectrogram ticks.
+        xTickTo = [str(x) for x in range(-8, 1)]
+        xTickFrom = [x * self.SPECTROGRAM_WIDTH / 8 for x in range(9)]
+        xTicks = dict(zip(xTickFrom, xTickTo))
+        xAxis = self.plots.spectrogramPlot.getAxis('bottom')
+        xAxis.setTicks([xTicks.items()])
+
+        # Convert pixel indices to frequency for spectrogram ticks.
+        yTickTo = [10, 100, 1000, 10000]
+        axisInterp = interp1d(self.spectrogramLogRange, self.spectrogramLinRange, kind='cubic')
+        yTickFrom = [int(axisInterp(max(1, x * self.SPECTROGRAM_HEIGHT / (self.SAMPLE_RATE / 2)))) for x in yTickTo]
+        yTicks = dict(zip(yTickFrom, [str(x) for x in yTickTo]))
+        yAxis = self.plots.spectrogramPlot.getAxis('left')
+        yAxis.setTicks([yTicks.items()])
+
 
         pos = np.array([0., 0.3, 0.7, 1.0])
         color = np.array([[0x0,  0x0,  0x24, 0xff],
@@ -234,7 +260,7 @@ class KrijsEenPrijs(QMainWindow):
         self.plots.keypress_widget.spaceBarClicked.connect(self.handleSpaceBarClicked)
 
         self.plots.setWindowTitle('Plots')
-        self.plots.resize(1920, 1200)
+        self.plots.resize(1920, 1080)
 
         self.plots.show()
 
@@ -262,7 +288,7 @@ class KrijsEenPrijs(QMainWindow):
         self.scores.actionNewRound.triggered.connect(self.clearRound)
 
         self.scores.setWindowTitle('High Scores')
-        self.scores.resize(1920, 1200)
+        self.scores.resize(1920, 1080)
         self.scores.show()
 
 
@@ -302,8 +328,8 @@ class KrijsEenPrijs(QMainWindow):
                 newData = np.concatenate((newData, self.deque.popleft()))
 
 
-        self.audioData = np.roll(self.audioData, len(newData))
-        self.audioData[:len(newData)] = newData
+        self.audioData = np.roll(self.audioData, -len(newData))
+        self.audioData[-len(newData):] = newData
 
         # process n spectra for every GUI update
         for i in range(n):
@@ -311,20 +337,15 @@ class KrijsEenPrijs(QMainWindow):
             x = self.FFT_SIZE + (n - 1 - i) * self.FFT_RATE
             y = (n - 1 - i) * self.FFT_RATE
 
-            fftData = self.audioData[:x] if y == 0 else self.audioData[y:x]
+            fftData = self.audioData[-x:] if y == 0 else self.audioData[-x:-y]
 
             self.spectrum = self.getSpectrum(fftData)
             self.maxSpectrum = np.maximum(self.maxSpectrum, self.spectrum)
 
             # create log interpolation of the spectrum
-            SIZE = self.FFT_SIZE // 2
-
-            linRange = np.array(np.arange(SIZE))
-            logRange = 10**(np.log10(SIZE) / SIZE * linRange) # (magic)
-            f = interp1d(linRange, self.spectrum, kind='cubic')
-
-            self.spectrogram = self.spectrogram[:,:-1]
-            self.spectrogram = np.column_stack([f(logRange), self.spectrogram])
+            self.spectrogramInterp = interp1d(self.spectrogramLinRange, self.spectrum, kind='cubic')
+            self.spectrogram = self.spectrogram[:,1:]
+            self.spectrogram = np.column_stack([self.spectrogram, self.spectrogramInterp(self.spectrogramLogRange)])
 
         # create higher precision spectrum for score
         self.longSpectrum = self.getSpectrum(self.audioData[-self.LONG_FFT_SIZE:])
