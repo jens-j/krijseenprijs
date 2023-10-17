@@ -59,17 +59,19 @@ class KrijsEenPrijs(QMainWindow):
     CHUNK_SIZE              = 2**11 # determines max plot framerate -> ~23.4 Hz
     FFT_RATE                = 2**10 # length of new audio data for each spectral update -> ~46.9 Hz time resolution in spectrogram
     FFT_SIZE                = 2**12 # old samples are used to pad fft
-    LONG_FFT_SIZE           = 2**16 # high resolution fft used only for scores
+    LONG_FFT_SIZE           = 2**16 # higher resolution fft used only for scores
     FFT_RESOLUTION          = SAMPLE_RATE / FFT_SIZE
     LONG_FFT_RESOLUTION     = SAMPLE_RATE / LONG_FFT_SIZE
     SPECTRUM_MIN_COLORMAP   = 0
-    SPECTRUM_MIN_GRAPH      = -20
-    SPECTRUM_MAX            = 100
+    SPECTRUM_MIN_GRAPH      = 0
+    SPECTRUM_MAX            = 140
+    P_REF                   = 2E-5 # Reference for dBSPL
     TIME_AXIS_SAMPLES       = SAMPLE_RATE * TIME_AXIS_LENGTH
     UPDATE_FREQ             = SAMPLE_RATE // CHUNK_SIZE
     SPECTROGRAM_WIDTH       = TIME_AXIS_SAMPLES // FFT_RATE
     SPECTROGRAM_HEIGHT      = FFT_SIZE // 2
-    CALIBRATION             = 120
+    CALIBRATION             = 94
+    MIC_SENSITIVITY         = 0.005 # Microphone sentivity in V/Pa. Reference is 1V. (actually specified as 0.025)
     DEFAULT_PRINTER         = 'PL04'
     NOTES                   = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
 
@@ -156,27 +158,30 @@ class KrijsEenPrijs(QMainWindow):
 
         self.plots = loadUi(f'{self.uipath}/plots_widget_grid.ui')
 
-        self.font = QFont()
-        self.font.setPixelSize(14)
+        self.tickFont = QFont()
+        self.tickFont.setPixelSize(14) # This does nothing.
+        # self.labelFont.setPixelSize(16)
+        # self.titleFont.setPixelSize(20)
+
         self.labelStyle = {'color': '#FFF', 'font-size': '16px'}
-        self.titleStyle = {'color': '#FFF', 'font-size': '40px'}
+        self.titleStyle = {'color': '#FFF', 'font-size': '40pt'}
 
         self.plots.labelLogo.setPixmap(QPixmap('images/sron_small_bg.png'))
 
         self.plots.timePlot.setTitle('Microphone Signal', **self.titleStyle)
         self.plots.timePlot.setLabel('left', 'amplitude', **self.labelStyle)
         self.plots.timePlot.setLabel('bottom', 'time (s)', **self.labelStyle)
-        self.plots.timePlot.getAxis('left').tickFont = self.font
-        self.plots.timePlot.getAxis('bottom').tickFont = self.font
+        self.plots.timePlot.getAxis('left').font = self.tickFont
+        self.plots.timePlot.getAxis('bottom').font = self.tickFont
         self.plots.timePlot.setRange(yRange=[1.2 * -2**15, 1.2 * 2**15])
         self.plots.timePlot.setMouseEnabled(x=False, y=False)
 
         self.plots.spectrumPlot.setTitle(title='Power Spectral Density', **self.titleStyle)
         self.plots.spectrumPlot.setLabel('left', 'frequency (Hz)', **self.labelStyle)
         self.plots.spectrumPlot.setLabel(
-            'bottom', 'power spectral density (dB)', **self.labelStyle)
-        self.plots.spectrumPlot.getAxis('left').tickFont = self.font
-        self.plots.spectrumPlot.getAxis('bottom').tickFont = self.font
+            'bottom', 'dBSPL', **self.labelStyle)
+        self.plots.spectrumPlot.getAxis('left').font = self.tickFont
+        self.plots.spectrumPlot.getAxis('bottom').font = self.tickFont
         self.plots.spectrumPlot.getPlotItem().setLogMode(False, True)
         self.plots.spectrumPlot.getPlotItem().setRange(
             xRange=[self.SPECTRUM_MIN_GRAPH, self.SPECTRUM_MAX])
@@ -196,10 +201,8 @@ class KrijsEenPrijs(QMainWindow):
         self.spectrogramImage = pg.ImageItem()
         self.spectrogramImage.setLevels([self.SPECTRUM_MIN_COLORMAP, self.SPECTRUM_MAX])
         self.plots.spectrogramPlot.setTitle('Spectrogram', **self.titleStyle)
-        self.plots.spectrogramPlot.setLabel('left', 'FFT bin', **self.labelStyle)
+        self.plots.spectrogramPlot.setLabel('left', 'frequency (Hz)', **self.labelStyle)
         self.plots.spectrogramPlot.setLabel('bottom', 'time (s)', **self.labelStyle)
-        # self.plots.spectrogramPlot.setLabel('left', ' ', **self.labelStyle)
-        # self.plots.spectrogramPlot.setLabel('bottom', ' ', **self.labelStyle)
         self.plots.spectrogramPlot.getAxis('left').tickFont = self.font
         self.plots.spectrogramPlot.getAxis('bottom').tickFont = self.font
         self.plots.spectrogramPlot.setMouseEnabled(x=False, y=False)
@@ -220,15 +223,7 @@ class KrijsEenPrijs(QMainWindow):
         yAxis = self.plots.spectrogramPlot.getAxis('left')
         yAxis.setTicks([yTicks.items()])
 
-
-        pos = np.array([0., 0.3, 0.7, 1.0])
-        color = np.array([[0x0,  0x0,  0x24, 0xff],
-                          [0x17, 0x29, 0xc3, 0xff],
-                          [0xd0, 0x24, 0x12, 0xff],
-                          [0xff, 0xc4, 0x0,  0xff]], dtype=np.ubyte)
-
-
-        cmap = pg.colormap.get('viridis')
+        cmap = pg.colormap.get('CET-L3')
         lut = cmap.getLookupTable(0.0, 1.0, 256)
         self.spectrogramImage.setLookupTable(lut)
 
@@ -292,18 +287,32 @@ class KrijsEenPrijs(QMainWindow):
         self.scores.show()
 
 
+    # Convert ADC samples to pascal and then calculate the power spectrum.
     def getSpectrum(self, data):
 
         SIZE = len(data)
+        # print(data)
 
-        data = data * np.hanning(SIZE)
+        # Window the data.
+        window = np.hanning(SIZE)
+        data = data * window
+
+        # Convert to rms?
+
+        # print('')
+        # print(SIZE, np.sum(np.hanning(SIZE)))
 
         spectrum = np.fft.rfft(data[-SIZE:])
-        spectrum = np.abs(spectrum) * 2 / SIZE
-        spectrum[spectrum == 0] = 1E-6
-        spectrum = 20 * np.log10(spectrum / 2**15)
+        spectrum = np.abs(spectrum) * 2 / sum(window) # Take absolute value, double to compensate dropping negative frequencies and device by window size.
+        spectrum[spectrum == 0] = 1E-6 # Replace zeros with something very small.
+        spectrum = 20 * np.log10(spectrum)
+
+        # print(spectrum)
+
         spectrum += self.CALIBRATION
         spectrum = np.clip(spectrum, self.SPECTRUM_MIN_GRAPH, self.SPECTRUM_MAX)
+
+        # Compensate for window?
 
         return spectrum[1:] # drop DC bin
 
@@ -331,6 +340,8 @@ class KrijsEenPrijs(QMainWindow):
         self.audioData = np.roll(self.audioData, -len(newData))
         self.audioData[-len(newData):] = newData
 
+        fftData = None
+
         # process n spectra for every GUI update
         for i in range(n):
 
@@ -338,6 +349,9 @@ class KrijsEenPrijs(QMainWindow):
             y = (n - 1 - i) * self.FFT_RATE
 
             fftData = self.audioData[-x:] if y == 0 else self.audioData[-x:-y]
+
+            # Convert ADC values to pressure [Pascal].
+            fftData = fftData / self.MIC_SENSITIVITY / 2**15
 
             self.spectrum = self.getSpectrum(fftData)
             self.maxSpectrum = np.maximum(self.maxSpectrum, self.spectrum)
@@ -348,13 +362,26 @@ class KrijsEenPrijs(QMainWindow):
             self.spectrogram = np.column_stack([self.spectrogram, self.spectrogramInterp(self.spectrogramLogRange)])
 
         # create higher precision spectrum for score
-        self.longSpectrum = self.getSpectrum(self.audioData[-self.LONG_FFT_SIZE:])
-        maxPower = np.amax(self.longSpectrum)
-        totalPower = np.average(self.longSpectrum)
+        # longFftData = self.audioData[-self.LONG_FFT_SIZE:] / self.MIC_SENSITIVITY / 2**15
+        # self.longSpectrum = self.getSpectrum(longFftData)
+        # maxPower = np.amax(self.longSpectrum)
+        # totalPower = np.sum(self.longSpectrum) / (self.LONG_FFT_SIZE / 2)
+        # maxBin = np.where(self.longSpectrum == maxPower)[0][0]
+
+        maxPower = np.amax(self.spectrum)
+        totalPower = np.sum(self.spectrum) / (self.FFT_SIZE / 2)
+        maxBin = np.where(self.spectrum == maxPower)[0][0]
+
+        # Calculate power based on time series.
+        timeseriesPower = np.average(np.sqrt(np.mean(fftData**2)))
+        timeseriesPowerLog = 20 * np.log10(timeseriesPower / self.P_REF)
+
+        print(totalPower, timeseriesPower, timeseriesPowerLog, maxPower, maxBin)
+
+
         if totalPower > self.totalPower:
             self.totalPower = float(totalPower)
-            self.maxFrequency = float(np.where(
-                self.longSpectrum == maxPower)[0][0]) * self.LONG_FFT_RESOLUTION
+            self.maxFrequency = float(maxBin) * self.FFT_RESOLUTION
             self.note = self.getNote(self.maxFrequency)
 
         self.updatePlots()
@@ -441,7 +468,7 @@ class KrijsEenPrijs(QMainWindow):
         y, x = np.histogram(powerScores, bins=np.linspace(
             np.min(powerScores), np.max(powerScores), self.scores.boxPowerBins.value() + 1))
         self.scores.powerHistogram.clear()
-        self.scores.powerHistogram.plot(x, y, stepMode=True, fillLevel=0, brush=(0,0,255,150))
+        self.scores.powerHistogram.plot(x, y, stepMode=True, fillLevel=0, brush=(180,0,0,150))
 
         frequencyScores = [x[2] for x in self.globalScores.values()]
         y, x = np.histogram(frequencyScores, bins=np.linspace(
@@ -449,7 +476,7 @@ class KrijsEenPrijs(QMainWindow):
                 np.max(frequencyScores),
                 self.scores.boxFrequencyBins.value() + 1))
         self.scores.frequencyHistogram.clear()
-        self.scores.frequencyHistogram.plot(x, y, stepMode=True, fillLevel=0, brush=(0,0,255,150))
+        self.scores.frequencyHistogram.plot(x, y, stepMode=True, fillLevel=0, brush=(180,0,0,150))
 
 
 
@@ -579,7 +606,7 @@ class KrijsEenPrijs(QMainWindow):
 
         diplomaPath = createDiploma(firstName, lastName, self.totalPower, self.maxFrequency, self.note)
 
-        # time.sleep(0.5)
+        time.sleep(0.5)
         run(['lp',
              '-o', 'print-quality=5', # use best quality
              '-o', 'fit-to-page',     # avoid clipped edges

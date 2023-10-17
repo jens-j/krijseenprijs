@@ -35,12 +35,12 @@ def createDiploma(name, surname, power, frequency, note):
     path = 'diplomas/diploma_{}_{}.pdf'.format(name, surname)
     c = canvas.Canvas(path)
 
-    c.drawImage('images/border_new3.png', 0, 0, 21*cm, 29.7*cm)
+    c.drawImage('images/border_lava.png', 0, 0, 21*cm, 29.7*cm)
 
     centerText(c, 'Krijsdiploma', 'Times-BoldItalic', 60, 23*cm)
     centerText(c, '{} {}'.format(name, surname), 'Times-BoldItalic', 32, 21.3*cm)
     centerText(c, 'Behaald op {}'.format(dateString), 'Times-Italic', 20, 20*cm)
-    centerText(c, 'Krijsniveau: {:.2f} dB'.format(power), 'Times-BoldItalic', 24, 19*cm)
+    centerText(c, 'Krijsniveau: {:.2f} dBSPL'.format(power), 'Times-BoldItalic', 24, 19*cm)
     centerText(c, 'Luidste toon: {:.2f} Hz ({})'.format(frequency, note), 'Times-BoldItalic', 24, 18*cm)
 
     drawText(c, 'Krijs signaal:', 'Times-Italic', 16, 2.5*cm, 16.8*cm)
