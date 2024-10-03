@@ -102,9 +102,9 @@ class KrijsEenPrijs(QMainWindow):
         self.spectrogramLinRange = np.array(np.arange(self.FFT_SIZE // 2))
         self.spectrogramLogRange = 10**(np.log10(self.FFT_SIZE // 2) / (self.FFT_SIZE // 2) * self.spectrogramLinRange) # (magic)
 
-        print(self.spectrogramLinRange)
-        print(self.spectrogramLogRange)
-        print(len(self.spectrogramLogRange))
+        # print(self.spectrogramLinRange)
+        # print(self.spectrogramLogRange)
+        # print(len(self.spectrogramLogRange))
 
         try:
             with open('scores/globalscores.yaml') as f:
@@ -287,20 +287,14 @@ class KrijsEenPrijs(QMainWindow):
         self.scores.show()
 
 
-    # Convert ADC samples to pascal and then calculate the power spectrum.
+    # Window the data and calculate the amplitude spectrum in dB.
     def getSpectrum(self, data):
 
         SIZE = len(data)
-        # print(data)
 
         # Window the data.
         window = np.hanning(SIZE)
         data = data * window
-
-        # Convert to rms?
-
-        # print('')
-        # print(SIZE, np.sum(np.hanning(SIZE)))
 
         spectrum = np.fft.rfft(data[-SIZE:])
         spectrum = np.abs(spectrum) * 2 / sum(window) # Take absolute value, double to compensate dropping negative frequencies and device by window size.
@@ -311,8 +305,6 @@ class KrijsEenPrijs(QMainWindow):
 
         spectrum += self.CALIBRATION
         spectrum = np.clip(spectrum, self.SPECTRUM_MIN_GRAPH, self.SPECTRUM_MAX)
-
-        # Compensate for window?
 
         return spectrum[1:] # drop DC bin
 
@@ -376,7 +368,7 @@ class KrijsEenPrijs(QMainWindow):
         timeseriesPower = np.average(np.sqrt(np.mean(fftData**2)))
         timeseriesPowerLog = 20 * np.log10(timeseriesPower / self.P_REF)
 
-        print(totalPower, timeseriesPower, timeseriesPowerLog, maxPower, maxBin)
+        # print(totalPower, timeseriesPower, timeseriesPowerLog, maxPower, maxBin)
 
 
         if totalPower > self.totalPower:
@@ -485,8 +477,6 @@ class KrijsEenPrijs(QMainWindow):
         if self.timer.isActive():
             data = np.frombuffer(inputData, np.int16)
             self.deque.append(data)
-        # print('emit')
-        # self.updateDataSignal.emit()
 
         return (inputData, pyaudio.paContinue)
 
@@ -566,35 +556,6 @@ class KrijsEenPrijs(QMainWindow):
         timePlot.hideAxis('left')
         timePlot.hideAxis('bottom')
         timePlot.resize(800,200)
-        timeCurve = timePlot.plot(self.timeAxis, self.audioData[::self.DECIMATION], pen=pen)
-
-        # create rotated version of spectrum
-        # labelStyle = {'color': '#000', 'font-size': '16px'}
-        # spectrumPlot = pg.PlotWidget()
-        # # spectrumPlot.setTitle(title='Power Spectral Density', **labelStyle)
-        # # spectrumPlot.setLabel('bottom', 'frequency (Hz)', **labelStyle)
-        # # spectrumPlot.setLabel('left', 'power spectral density (dB)', **labelStyle)
-        # spectrumPlot.getAxis("left").setWidth(200)
-        # spectrumPlot.getAxis('left').setPen(pen)
-        # spectrumPlot.getAxis('bottom').setPen(pen)
-        # #spectrumPlot.setBackground(None)
-        # spectrumPlot.getPlotItem().setLogMode(True, False)
-        # spectrumPlot.getPlotItem().setRange(
-        #     xRange=[1, np.log10(self.SAMPLE_RATE // 2)],
-        #     yRange=[0, self.SPECTRUM_MAX])
-
-        # spectrumPlot.getAxis('left').setTicks(
-        #     [[(x, str(x)) for x in range(self.SPECTRUM_MIN_GRAPH, self.SPECTRUM_MAX, 20)]])
-
-        # spectrumPlot.getAxis('bottom').setTicks(
-        #     [[(x, str(int(10**x))) for x in [1, 2, 3, 4, 5]]])
-
-        # spectrumCurve = spectrumPlot.plot(self.spectrumScale, self.maxSpectrum, pen=pen)
-
-        # export plots to png
-        # exporter = ImageExporter(spectrumPlot.plotItem)
-        # exporter.parameters()['width'] = 2000
-        # exporter.export('images/spectrum.png')
 
         exporter = ImageExporter(timePlot.plotItem)
         exporter.parameters()['width'] = 2000
