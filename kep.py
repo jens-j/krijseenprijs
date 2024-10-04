@@ -53,27 +53,27 @@ class MyQWidget(QWidget):
 
 class KrijsEenPrijs(QMainWindow):
 
-    TIME_AXIS_LENGTH        = 8    # s
-    SAMPLE_RATE             = 48000 # Hz
-    DECIMATION              = 32    # sample decimation factor for time plot
-    CHUNK_SIZE              = 2**11 # determines max plot framerate -> ~23.4 Hz
-    FFT_RATE                = 2**10 # length of new audio data for each spectral update -> ~46.9 Hz time resolution in spectrogram
-    FFT_SIZE                = 2**12 # old samples are used to pad fft
-    LONG_FFT_SIZE           = 2**16 # higher resolution fft used only for scores
-    FFT_RESOLUTION          = SAMPLE_RATE / FFT_SIZE
-    LONG_FFT_RESOLUTION     = SAMPLE_RATE / LONG_FFT_SIZE
-    SPECTRUM_MIN_COLORMAP   = 0
-    SPECTRUM_MIN_GRAPH      = 0
-    SPECTRUM_MAX            = 140
-    P_REF                   = 2E-5 # Reference for dBSPL
-    TIME_AXIS_SAMPLES       = SAMPLE_RATE * TIME_AXIS_LENGTH
-    UPDATE_FREQ             = SAMPLE_RATE // CHUNK_SIZE
-    SPECTROGRAM_WIDTH       = TIME_AXIS_SAMPLES // FFT_RATE
-    SPECTROGRAM_HEIGHT      = FFT_SIZE // 2
-    CALIBRATION             = 94
-    MIC_SENSITIVITY         = 0.005 # Microphone sentivity in V/Pa. Reference is 1V. (actually specified as 0.025)
-    DEFAULT_PRINTER         = 'PL04'
-    NOTES                   = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+    TIME_AXIS_LENGTH            = 8     # s
+    SAMPLE_RATE                 = 44100 # Hz
+    DECIMATION                  = 32    # sample decimation factor for time plot
+    CHUNK_SIZE                  = 2**11 # determines max plot framerate -> ~23.4 Hz
+    FFT_RATE                    = 2**10 # length of new audio data for each spectral update -> ~46.9 Hz time resolution in spectrogram
+    FFT_SIZE                    = 2**12 # old samples are used to pad fft
+    LONG_FFT_SIZE               = 2**16 # higher resolution fft used only for scores
+    FFT_RESOLUTION              = SAMPLE_RATE / FFT_SIZE
+    LONG_FFT_RESOLUTION         = SAMPLE_RATE / LONG_FFT_SIZE
+    SPECTRUM_MIN_VALUE_COLORMAP = 0
+    SPECTRUM_MIN_VALUE_GRAPH    = 0
+    SPECTRUM_MAX                = 140
+    P_REF                       = 2E-5 # Reference for dBSPL
+    TIME_AXIS_SAMPLES           = SAMPLE_RATE * TIME_AXIS_LENGTH
+    UPDATE_FREQ                 = SAMPLE_RATE // CHUNK_SIZE
+    SPECTROGRAM_WIDTH           = TIME_AXIS_SAMPLES // FFT_RATE
+    SPECTROGRAM_HEIGHT          = FFT_SIZE // 2
+    CALIBRATION                 = 94
+    MIC_SENSITIVITY             = 0.005 # Microphone sentivity in V/Pa. Reference is 1V. (actually specified as 0.025)
+    DEFAULT_PRINTER             = 'PL04'
+    NOTES                       = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
 
     updateDataSignal = pyqtSignal()
     updateScoresSignal = pyqtSignal()
@@ -101,10 +101,6 @@ class KrijsEenPrijs(QMainWindow):
 
         self.spectrogramLinRange = np.array(np.arange(self.FFT_SIZE // 2))
         self.spectrogramLogRange = 10**(np.log10(self.FFT_SIZE // 2) / (self.FFT_SIZE // 2) * self.spectrogramLinRange) # (magic)
-
-        # print(self.spectrogramLinRange)
-        # print(self.spectrogramLogRange)
-        # print(len(self.spectrogramLogRange))
 
         try:
             with open('scores/globalscores.yaml') as f:
@@ -143,12 +139,12 @@ class KrijsEenPrijs(QMainWindow):
 
     def initPlotData(self):
 
-        self.totalPower  = self.SPECTRUM_MIN_COLORMAP
+        self.totalPower  = self.SPECTRUM_MIN_VALUE_COLORMAP
         self.audioData   = np.zeros(self.TIME_AXIS_SAMPLES, dtype=np.int16)
-        self.spectrum    = np.ones(self.FFT_SIZE // 2, dtype=np.int16) * self.SPECTRUM_MIN_COLORMAP
-        self.maxSpectrum = np.ones(self.FFT_SIZE // 2, dtype=np.int16) * self.SPECTRUM_MIN_COLORMAP
+        self.spectrum    = np.ones(self.FFT_SIZE // 2, dtype=np.int16) * self.SPECTRUM_MIN_VALUE_COLORMAP
+        self.maxSpectrum = np.ones(self.FFT_SIZE // 2, dtype=np.int16) * self.SPECTRUM_MIN_VALUE_COLORMAP
         self.spectrogram = np.ones((self.SPECTROGRAM_HEIGHT, self.SPECTROGRAM_WIDTH), dtype=np.float32) \
-            * self.SPECTRUM_MIN_COLORMAP
+            * self.SPECTRUM_MIN_VALUE_COLORMAP
 
 
     def initPlotsGui(self):
@@ -184,10 +180,10 @@ class KrijsEenPrijs(QMainWindow):
         self.plots.spectrumPlot.getAxis('bottom').font = self.tickFont
         self.plots.spectrumPlot.getPlotItem().setLogMode(False, True)
         self.plots.spectrumPlot.getPlotItem().setRange(
-            xRange=[self.SPECTRUM_MIN_GRAPH, self.SPECTRUM_MAX])
+            xRange=[self.SPECTRUM_MIN_VALUE_GRAPH, self.SPECTRUM_MAX])
 
         self.plots.spectrumPlot.getAxis('bottom').setTicks(
-            [[(x, str(x)) for x in range(self.SPECTRUM_MIN_COLORMAP, self.SPECTRUM_MAX + 20, 20)]])
+            [[(x, str(x)) for x in range(self.SPECTRUM_MIN_VALUE_COLORMAP, self.SPECTRUM_MAX + 20, 20)]])
 
         self.plots.spectrumPlot.getAxis('left').setTicks(
             [[(x, str(int(10**x))) for x in [1, 2, 3, 4, 5]]])
@@ -199,7 +195,7 @@ class KrijsEenPrijs(QMainWindow):
         self.spectrumMaxCurve = self.plots.spectrumPlot.plot()
 
         self.spectrogramImage = pg.ImageItem()
-        self.spectrogramImage.setLevels([self.SPECTRUM_MIN_COLORMAP, self.SPECTRUM_MAX])
+        self.spectrogramImage.setLevels([self.SPECTRUM_MIN_VALUE_COLORMAP, self.SPECTRUM_MAX])
         self.plots.spectrogramPlot.setTitle('Spectrogram', **self.titleStyle)
         self.plots.spectrogramPlot.setLabel('left', 'frequency (Hz)', **self.labelStyle)
         self.plots.spectrogramPlot.setLabel('bottom', 'time (s)', **self.labelStyle)
@@ -304,7 +300,7 @@ class KrijsEenPrijs(QMainWindow):
         # print(spectrum)
 
         spectrum += self.CALIBRATION
-        spectrum = np.clip(spectrum, self.SPECTRUM_MIN_GRAPH, self.SPECTRUM_MAX)
+        spectrum = np.clip(spectrum, self.SPECTRUM_MIN_VALUE_GRAPH, self.SPECTRUM_MAX)
 
         return spectrum[1:] # drop DC bin
 
@@ -494,7 +490,7 @@ class KrijsEenPrijs(QMainWindow):
 
         inputDevices = list(filter(lambda x: x['maxInputChannels'] > 0, devices))
         usbMicrophones = \
-            list(filter(lambda x: 'USB PnP Audio Device' in x['name'], inputDevices))
+            list(filter(lambda x: 'USB PnP Sound Device' in x['name'], inputDevices))
 
         assert len(usbMicrophones) > 0, 'No microphone detected'
         print(usbMicrophones)
@@ -591,6 +587,9 @@ class KrijsEenPrijs(QMainWindow):
 
     # Return the closest note for a frequency
     def getNote(self, frequency):
+
+        # Avoid log(0)
+        frequency = max(1, frequency)
 
         # calculate the interval in semitones w.r.t C0.
         semitones = int(np.round(np.log2(frequency / 16.35) / (np.log2(2) / 12)))
