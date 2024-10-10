@@ -552,6 +552,7 @@ class KrijsEenPrijs(QMainWindow):
         timePlot.hideAxis('left')
         timePlot.hideAxis('bottom')
         timePlot.resize(800,200)
+        timePlot.plot(self.timeAxis, self.audioData[::self.DECIMATION], pen=pen)
 
         exporter = ImageExporter(timePlot.plotItem)
         exporter.parameters()['width'] = 2000
